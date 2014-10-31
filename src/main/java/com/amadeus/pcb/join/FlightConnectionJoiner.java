@@ -16,7 +16,6 @@ import org.slf4j.Logger;
 
 import java.text.SimpleDateFormat;
 import java.util.*;
-import java.util.logging.Filter;
 
 public class FlightConnectionJoiner {
 
@@ -1293,7 +1292,8 @@ public class FlightConnectionJoiner {
 
             DataSet<Tuple7<String, String, String, String, String, Double, Double>> airportCoordinates =
                     airportCoordinatesNR.join(regionInfo).where(3).equalTo(0).with(new RegionJoiner());
-            // discard all connections that don't contain an IATA airport code
+
+            /*
             KeySelector<Flight, String> jk1 = new KeySelector<Flight, String>() {
                 public String getKey(Flight tuple) {
                     return tuple.getOriginAirport();
@@ -1304,9 +1304,10 @@ public class FlightConnectionJoiner {
                     return tuple.getDestinationAirport();
                 }
             };
+            */
 
-            DataSet<Flight> join1 = extracted.join(airportCoordinates, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where(jk1).equalTo(0).with(new OriginCoordinateJoiner());
-            DataSet<Flight> join2 = join1.join(airportCoordinates, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where(jk2).equalTo(0).with(new DestinationCoordinateJoiner());
+            DataSet<Flight> join1 = extracted.join(airportCoordinates, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where("f0.f0").equalTo(0).with(new OriginCoordinateJoiner());
+            DataSet<Flight> join2 = join1.join(airportCoordinates, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where("f2.f0").equalTo(0).with(new DestinationCoordinateJoiner());
 
             // add aircraft capacities (first default then overwrite with airline specific information if available)
             DataSet<Tuple2<String, Integer>> defaultCapacities = env.readCsvFile(defaultCapacityPath).types(String.class, Integer.class);
@@ -1331,13 +1332,33 @@ public class FlightConnectionJoiner {
             */
 
             // create multi-leg flights as non-stop flights
-            DataSet<Flight> multiLeg2 = join4.join(join4, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where("f2.f2", "f4", "f5").equalTo("f0.f2", "f4", "f5").with(new MultiLegJoiner());
-            DataSet<Flight> multiLeg3 = multiLeg2.join(join4, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where("f2.f2", "f4", "f5").equalTo("f0.f2", "f4", "f5").with(new MultiLegJoiner());
-            DataSet<Flight> multiLeg4 = multiLeg2.join(multiLeg2, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where("f2.f2", "f4", "f5").equalTo("f0.f2", "f4", "f5").with(new MultiLegJoiner());
-            DataSet<Flight> multiLeg5 = multiLeg2.join(multiLeg3, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where("f2.f2", "f4", "f5").equalTo("f0.f2", "f4", "f5").with(new MultiLegJoiner());
-            DataSet<Flight> multiLeg6 = multiLeg3.join(multiLeg3, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where("f2.f2", "f4", "f5").equalTo("f0.f2", "f4", "f5").with(new MultiLegJoiner());
-            DataSet<Flight> multiLeg7 = multiLeg3.join(multiLeg4, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where("f2.f2", "f4", "f5").equalTo("f0.f2", "f4", "f5").with(new MultiLegJoiner());
-            DataSet<Flight> multiLeg8 = multiLeg4.join(multiLeg4, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where("f2.f2", "f4", "f5").equalTo("f0.f2", "f4", "f5").with(new MultiLegJoiner());
+            DataSet<Flight> multiLeg2a = join4.join(join4, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where("f2.f2", "f4", "f5", "f13").equalTo("f0.f2", "f4", "f5", "f12").with(new MultiLegJoiner());
+            DataSet<Flight> multiLeg2b = join4.join(join4, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where("f2.f2", "f4", "f5", "f14").equalTo("f0.f2", "f4", "f5", "f12").with(new MultiLegJoiner());
+            DataSet<Flight> multiLeg2 = multiLeg2a.union(multiLeg2b);
+
+            DataSet<Flight> multiLeg3a = multiLeg2.join(join4, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where("f2.f2", "f4", "f5", "f13").equalTo("f0.f2", "f4", "f5", "f12").with(new MultiLegJoiner());
+            DataSet<Flight> multiLeg3b = multiLeg2.join(join4, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where("f2.f2", "f4", "f5", "f14").equalTo("f0.f2", "f4", "f5", "f12").with(new MultiLegJoiner());
+            DataSet<Flight> multiLeg3 = multiLeg3a.union(multiLeg3b);
+
+            DataSet<Flight> multiLeg4a = multiLeg2.join(multiLeg2, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where("f2.f2", "f4", "f5", "f13").equalTo("f0.f2", "f4", "f5", "f12").with(new MultiLegJoiner());
+            DataSet<Flight> multiLeg4b = multiLeg2.join(multiLeg2, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where("f2.f2", "f4", "f5", "f14").equalTo("f0.f2", "f4", "f5", "f12").with(new MultiLegJoiner());
+            DataSet<Flight> multiLeg4 = multiLeg4a.union(multiLeg4b);
+
+            DataSet<Flight> multiLeg5a = multiLeg2.join(multiLeg3, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where("f2.f2", "f4", "f5", "f13").equalTo("f0.f2", "f4", "f5", "f12").with(new MultiLegJoiner());
+            DataSet<Flight> multiLeg5b = multiLeg2.join(multiLeg3, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where("f2.f2", "f4", "f5", "f14").equalTo("f0.f2", "f4", "f5", "f12").with(new MultiLegJoiner());
+            DataSet<Flight> multiLeg5 = multiLeg5a.union(multiLeg5b);
+
+            DataSet<Flight> multiLeg6a = multiLeg3.join(multiLeg3, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where("f2.f2", "f4", "f5", "f13").equalTo("f0.f2", "f4", "f5", "f12").with(new MultiLegJoiner());
+            DataSet<Flight> multiLeg6b = multiLeg3.join(multiLeg3, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where("f2.f2", "f4", "f5", "f14").equalTo("f0.f2", "f4", "f5", "f12").with(new MultiLegJoiner());
+            DataSet<Flight> multiLeg6 = multiLeg6a.union(multiLeg6b);
+
+            DataSet<Flight> multiLeg7a = multiLeg3.join(multiLeg4, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where("f2.f2", "f4", "f5", "f13").equalTo("f0.f2", "f4", "f5", "f12").with(new MultiLegJoiner());
+            DataSet<Flight> multiLeg7b = multiLeg3.join(multiLeg4, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where("f2.f2", "f4", "f5", "f14").equalTo("f0.f2", "f4", "f5", "f12").with(new MultiLegJoiner());
+            DataSet<Flight> multiLeg7 = multiLeg7a.union(multiLeg7b);
+
+            DataSet<Flight> multiLeg8a = multiLeg4.join(multiLeg4, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where("f2.f2", "f4", "f5", "f13").equalTo("f0.f2", "f4", "f5", "f12").with(new MultiLegJoiner());
+            DataSet<Flight> multiLeg8b = multiLeg4.join(multiLeg4, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where("f2.f2", "f4", "f5", "f14").equalTo("f0.f2", "f4", "f5", "f12").with(new MultiLegJoiner());
+            DataSet<Flight> multiLeg8 = multiLeg8a.union(multiLeg8b);
 
             DataSet<Flight> singleFltNoFlights = join4.union(multiLeg2).union(multiLeg3).union(multiLeg4).union(multiLeg5).union(multiLeg6).union(multiLeg7).union(multiLeg8);
 
