@@ -16,6 +16,7 @@ import org.slf4j.Logger;
 
 import java.text.SimpleDateFormat;
 import java.util.*;
+import java.util.logging.Filter;
 
 public class FlightConnectionJoiner {
 
@@ -53,105 +54,6 @@ public class FlightConnectionJoiner {
 	//origin, destination, airline, flight number, departure, arrival, originLat, originLong, originCountry, destinationLat, destinationLong, destinationCountry, originTerminal, destinationTerminal, codeshareInfo
 
 	@SuppressWarnings("serial")
-	public static class WeekFilter implements FlatMapFunction<String, String> {
-
-		String[] tmp = null;
-		
-		Calendar cal = Calendar.getInstance(TimeZone.getTimeZone("GMT+0000"), Locale.FRENCH);
-		
-		SimpleDateFormat format = new SimpleDateFormat("yyMMddHHmm");
-		
-		Date earliest = new Date(START); // 1405040000
-		Date latest = new Date(END); // 1405070000
-		
-		private final static ArrayList<String> nonAirCraftList = new ArrayList<String>() {{
-			add("AGH");add("BH2");add("BUS");add("ICE");
-			add("LCH");add("LMO");add("MD9");add("NDE");
-			add("S61");add("S76");add("TRN");add("TSL");
-			}};
-			
-		@Override
-		public void flatMap(String value, Collector<String> out)
-				throws Exception {
-			tmp = value.split("\\^");
-            if(tmp[0].trim().startsWith("#")) {
-                // header
-                return;
-            }
-			if(nonAirCraftList.contains(tmp[9].trim())) {
-                // not an aircraft
-                return;
-            }
-			String localDepartureDate = tmp[0].trim();
-			String localDepartureTime = tmp[3].trim();
-			String localDepartureOffset = tmp[4].trim();
-			Date departure = format.parse(localDepartureDate + localDepartureTime);
-			cal.setTime(departure);
-			int sign = 0;
-			if(localDepartureOffset.startsWith("-")) {
-				sign = 1;
-			} else if(localDepartureOffset.startsWith("+")) {
-				sign = -1;
-			} else {
-				throw new Exception("Parse error. Wrong sign! Original String: " + value);
-			}
-			int hours = Integer.parseInt(localDepartureOffset.substring(1, 3));
-			int minutes = Integer.parseInt(localDepartureOffset.substring(3, 5));
-			cal.add(Calendar.HOUR_OF_DAY, sign*hours);
-			cal.add(Calendar.MINUTE, sign*minutes);
-			departure = cal.getTime();
-			// only flights departing between 1405010000 and 1405070000
-			if(departure.before(earliest) || departure.after(latest)) {
-				return;
-			}
-			if(tmp.length > 37 && tmp[37].trim().isEmpty() && !tmp[8].trim().equals(tmp[13].trim())) {
-				// not an operating carrier
-				// if airline and aircraft owner are identical the rule becomes moot
-				return;
-			}
-			String localArrivalTime = tmp[5].trim();
-			String localArrivalOffset = tmp[6].trim();
-			String dateChange = tmp[7].trim();
-			Date arrival = format.parse(localDepartureDate + localArrivalTime);
-			cal.setTime(arrival);
-			if(!dateChange.equals("0")) {
-				if(dateChange.equals("1")) {
-					cal.add(Calendar.DAY_OF_YEAR, 1);
-				} else if(dateChange.equals("2")) {
-					cal.add(Calendar.DAY_OF_YEAR, 2);
-				} else if(dateChange.equals("A") || dateChange.equals("J") || dateChange.equals("-1")) {
-					cal.add(Calendar.DAY_OF_YEAR, -1);
-				} else {
-					throw new Exception("Unknown arrival_date_variation modifier: " + dateChange + " original string: " + value);
-				}
-			}
-			if(localArrivalOffset.startsWith("-")) {
-				sign = 1;
-			} else if(localArrivalOffset.startsWith("+")) {
-				sign = -1;
-			} else {
-				throw new Exception("Parse error. Wrong sign!");
-			}
-			hours = Integer.parseInt(localArrivalOffset.substring(1, 3));
-			minutes = Integer.parseInt(localArrivalOffset.substring(3, 5));
-			cal.add(Calendar.HOUR_OF_DAY, sign*hours);
-			cal.add(Calendar.MINUTE, sign*minutes);
-			arrival = cal.getTime();
-			// sanity check
-			if(arrival.before(departure) || arrival.equals(departure)) {
-				return;
-				/*
-				throw new Exception("Sanity check failed! Arrival equal to or earlier than departure.\n" +
-						"Departure: " + departure.toString() + " Arrival: " + arrival.toString() + "\n"  + 
-						"Sign: " + sign + " Hours: " + hours + " Minutes: " + minutes + "\n" +
-						"Original value: " + value);*/
-			}
-			out.collect(value);
-		}
-		
-	}
-
-	@SuppressWarnings("serial")
 	public static class FilteringUTCExtractor implements 
 	FlatMapFunction<String, Flight> {
 		
@@ -161,8 +63,8 @@ public class FlightConnectionJoiner {
 		
 		SimpleDateFormat format = new SimpleDateFormat("yyMMddHHmm");
 		
-		Date earliest = new Date(START); // 1405040000
-		Date latest = new Date(END); // 1405070000
+		Date earliest = new Date(START);
+		Date latest = new Date(END);
 		
 		private final static ArrayList<String> nonAirCraftList = new ArrayList<String>() {{
 			add("AGH");add("BH2");add("BUS");add("ICE");
@@ -200,13 +102,11 @@ public class FlightConnectionJoiner {
 			cal.add(Calendar.HOUR_OF_DAY, sign*hours);
 			cal.add(Calendar.MINUTE, sign*minutes);
 			departure = cal.getTime();
-			// only flights departing between 1405010000 and 1405070000
 			if(departure.before(earliest) || departure.after(latest)) {
 				return;
 			}
 			if(tmp.length > 37 && !tmp[37].trim().isEmpty()) {
 				// not an operating carrier
-				// if airline and aircraft owner are identical the rule becomes moot /  && !tmp[8].trim().equals(tmp[13].trim())
 				return;
 			}
 			String localArrivalTime = tmp[5].trim();
@@ -909,7 +809,7 @@ public class FlightConnectionJoiner {
                 }
                 long MCT = 0L;
                 int bestResult = 0;
-                // search for best fit in connStatList
+                // search for best rule in connStatList
                 int tmpResult = 0;
                 MCTEntry bestRule = null;
                 for (MCTEntry e : connStatList) {
@@ -937,9 +837,6 @@ public class FlightConnectionJoiner {
             if(MCT >= 999L) {
                 return false;
             }
-            //double ODDist = dist(conn.f0.getOriginLatitude(), conn.f0.getOriginLongitude(),
-            //  conn.f1.getDestinationLatitude(), conn.f1.getDestinationLongitude());
-            //long MaxCT = computeMaxCT(ODDist)*60L*1000L;
             long MinCT = MCT*60L*1000L;
             long hubTime = conn.f1.getDepartureTimestamp() - conn.f0.getArrivalTimestamp();
             if(hubTime < MinCT) {
@@ -953,13 +850,13 @@ public class FlightConnectionJoiner {
 
             @Override
             public int compare(MCTEntry mctEntry, MCTEntry mctEntry2) {
-                // we want a descending order
+                // descending order
                 return scoreRule(mctEntry2)-scoreRule(mctEntry);
             }
 
             @Override
             public boolean equals(Object o) {
-                // we assume MCT rules are unique
+                // MCT rules are assumed to be unique
                 return false;
             }
         }
@@ -1136,164 +1033,20 @@ public class FlightConnectionJoiner {
             }
             return true;
         }
+    }
 
+    /**
+     * Discard all flights that depart outside the given date range
+     */
+    public static class DateRangeFilter implements FilterFunction<Flight> {
 
-        /**
-         * Checks whether a given MCT entry applies to a flight connection.
-         * This functions attempts to return the highest number
-         * for the applicable rule by weighting matched criteria
-         * If a single part of the rule does not match it will be discarded.
-         *
-         * @param conn two-leg flight connection
-         * @param rule MCT entry
-         * @return score of matching criteria, 0 if at least a single one does NOT match
-         */
-        private static int ruleMatch(Tuple2<Flight, Flight> conn, MCTEntry rule) {
-            // TODO: start with date check
-            int result = 0;
-            if(!rule.getArrival().isEmpty()) {
-                if(conn.f0.getDestinationAirport().equals(rule.getArrival())) {
-                    result+=1;
-                } else {
-                    return 0;
-                }
+        @Override
+        public boolean filter(Flight flight) throws Exception {
+            if(flight.getDepartureTimestamp() < START || flight.getDepartureTimestamp() > END) {
+                return false;
+            } else {
+                return true;
             }
-            if(!rule.getDeparture().isEmpty()) {
-                if(conn.f1.getOriginAirport().equals(rule.getDeparture())) {
-                    result+=1;
-                } else {
-                    return 0;
-                }
-            }
-            if(!rule.getArrCarrier().isEmpty()) {
-                if(conn.f0.getAirline().equals(rule.getArrCarrier())) {
-                    result+=1000;
-                    if(rule.getInFlightNumber().intValue() != 0) {
-                        if(conn.f0.getFlightNumber() >= rule.getInFlightNumber() &&
-                                conn.f0.getFlightNumber() <= rule.getInFlightEOR()) {
-                            result+=1000000;
-                        } else {
-                            return 0;
-                        }
-                    }
-                } else {
-                    return 0;
-                }
-            }
-            if(!rule.getDepCarrier().isEmpty()) {
-                if(conn.f1.getAirline().equals(rule.getDepCarrier())) {
-                    result+=1000;
-                    if(rule.getOutFlightNumber().intValue() != 0) {
-                        if(conn.f1.getFlightNumber() >= rule.getOutFlightNumber() &&
-                                conn.f1.getFlightNumber() <= rule.getOutFlightEOR()) {
-                            result+=1000000;
-                        } else {
-                            return 0;
-                        }
-                    }
-                } else {
-                    return 0;
-                }
-            }
-            if(!rule.getArrAircraft().isEmpty()) {
-                if(conn.f0.getAircraftType().equals(rule.getArrAircraft())) {
-                    result+=100;
-                } else {
-                    return 0;
-                }
-            }
-            if(!rule.getDepAircraft().isEmpty()) {
-                if(conn.f1.getAircraftType().equals(rule.getDepAircraft())) {
-                    result+=100;
-                } else {
-                    return 0;
-                }
-            }
-            if(!rule.getArrTerminal().isEmpty()) {
-                if(conn.f0.getDestinationTerminal().equals(rule.getArrTerminal())) {
-                    result+=1000;
-                } else {
-                    return 0;
-                }
-            }
-            if(!rule.getDepTerminal().isEmpty()) {
-                if(conn.f1.getOriginTerminal().equals(rule.getDepTerminal())) {
-                    result+=1000;
-                } else {
-                    return 0;
-                }
-            }
-            if(!rule.getPrevCountry().isEmpty()) {
-                if(conn.f0.getOriginCountry().equals(rule.getPrevCountry())) {
-                    result+=10;
-                } else {
-                    return 0;
-                }
-            }
-            if(!rule.getPrevCity().isEmpty()) {
-                if(conn.f0.getOriginCity().equals(rule.getPrevCity())) {
-                    result+=1000;
-                } else {
-                    return 0;
-                }
-            }
-            if(!rule.getPrevAirport().isEmpty()) {
-                if(conn.f0.getOriginAirport().equals(rule.getPrevAirport())) {
-                    result+=1000;
-                } else {
-                    return 0;
-                }
-            }
-            if(!rule.getNextCountry().isEmpty()) {
-                if(conn.f1.getDestinationCountry().equals(rule.getNextCountry())) {
-                    result+=10;
-                } else {
-                    return 0;
-                }
-            }
-            if(!rule.getNextCity().isEmpty()) {
-                if(conn.f1.getDestinationCity().equals(rule.getNextCity())) {
-                    result+=1000;
-                } else {
-                    return 0;
-                }
-            }
-            if(!rule.getNextAirport().isEmpty()) {
-                if(conn.f1.getDestinationAirport().equals(rule.getNextAirport())) {
-                    result+=1000;
-                } else {
-                    return 0;
-                }
-            }
-            if(!rule.getPrevState().isEmpty()) {
-                if(conn.f0.getOriginState().equals(rule.getPrevState())) {
-                    result+=100;
-                } else {
-                    return 0;
-                }
-            }
-            if(!rule.getNextState().isEmpty()) {
-                if(conn.f1.getDestinationState().equals(rule.getNextState())) {
-                    result+=100;
-                } else {
-                    return 0;
-                }
-            }
-            if(!rule.getPrevRegion().isEmpty()) {
-                if(conn.f0.getOriginRegion().equals(rule.getPrevRegion())) {
-                    result+=10;
-                } else {
-                    return 0;
-                }
-            }
-            if(!rule.getNextRegion().isEmpty()) {
-                if(conn.f1.getDestinationRegion().equals(rule.getNextRegion())) {
-                    result+=10;
-                } else {
-                    return 0;
-                }
-            }
-            return result;
         }
     }
 
@@ -1350,6 +1103,9 @@ public class FlightConnectionJoiner {
         }
     }
 
+    /**
+     * Statistics for non-stop flights
+     */
     public static class ODCounter1 implements GroupReduceFunction<Flight, ConnectionStats> {
 
         @Override
@@ -1403,6 +1159,9 @@ public class FlightConnectionJoiner {
         }
     }
 
+    /**
+     * Statistics for two-leg flights
+     */
     public static class ODCounter2 implements GroupReduceFunction<Tuple2<Flight, Flight>, ConnectionStats> {
 
         @Override
@@ -1452,6 +1211,9 @@ public class FlightConnectionJoiner {
         }
     }
 
+    /**
+     * Statistics for three-leg flights
+     */
     public static class ODCounter3 implements GroupReduceFunction<Tuple3<Flight, Flight, Flight>, ConnectionStats> {
 
         @Override
@@ -1513,12 +1275,9 @@ public class FlightConnectionJoiner {
         if(args.length == 1) {
             first = Boolean.parseBoolean(args[0]);
         }
+        // the program is split into two parts (building and parsing all non-stop connections, and finding multi-leg flights)
         if(first) {
             ExecutionEnvironment env = ExecutionEnvironment.getExecutionEnvironment();
-            //env.setDegreeOfParallelism(1);
-
-            //DataSet<String> f = env.readTextFile("file:///home/robert/Amadeus/data/flights.txt");
-            //f.flatMap(new WeekFilter()).writeAsText("file:///home/robert/Amadeus/data/week/", WriteMode.OVERWRITE);
 
             // get all relevant schedule data
             DataSet<String> flights = env.readTextFile(schedulePath);
@@ -1549,6 +1308,7 @@ public class FlightConnectionJoiner {
             DataSet<Flight> join1 = extracted.join(airportCoordinates, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where(jk1).equalTo(0).with(new OriginCoordinateJoiner());
             DataSet<Flight> join2 = join1.join(airportCoordinates, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where(jk2).equalTo(0).with(new DestinationCoordinateJoiner());
 
+            // add aircraft capacities (first default then overwrite with airline specific information if available)
             DataSet<Tuple2<String, Integer>> defaultCapacities = env.readCsvFile(defaultCapacityPath).types(String.class, Integer.class);
             DataSet<Flight> join3 = join2.join(defaultCapacities).where("f6").equalTo(0).with(new DefaultCapacityJoiner());
 
@@ -1557,19 +1317,20 @@ public class FlightConnectionJoiner {
 
             DataSet<Flight> join4 = join3.join(aircraftCapacities).where("f6", "f4").equalTo(0, 1).with(new CapacityJoiner());
 
+            /*
             KeySelector<Flight, Tuple3<String, String, Integer>> ml1 = new KeySelector<Flight, Tuple3<String, String, Integer>>() {
                 public Tuple3<String, String, Integer> getKey(Flight tuple) {
-                    return new Tuple3<String, String, Integer>
-                            (tuple.getOriginCity(), tuple.getAirline(), tuple.getFlightNumber());
+                    return new Tuple3<String, String, Integer>(tuple.getOriginCity(), tuple.getAirline(), tuple.getFlightNumber());
                 }
             };
             KeySelector<Flight, Tuple3<String, String, Integer>> ml2 = new KeySelector<Flight, Tuple3<String, String, Integer>>() {
-                public Tuple3<String, String, Integer> getKey(Flight tuple) {
-                    return new Tuple3<String, String, Integer>
-                            (tuple.getDestinationCity(), tuple.getAirline(), tuple.getFlightNumber());
-                }
+                 public Tuple3<String, String, Integer> getKey(Flight tuple) {
+                     return new Tuple3<String, String, Integer>(tuple.getDestinationCity(), tuple.getAirline(), tuple.getFlightNumber());
+                 }
             };
+            */
 
+            // create multi-leg flights as non-stop flights
             DataSet<Flight> multiLeg2 = join4.join(join4, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where("f2.f2", "f4", "f5").equalTo("f0.f2", "f4", "f5").with(new MultiLegJoiner());
             DataSet<Flight> multiLeg3 = multiLeg2.join(join4, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where("f2.f2", "f4", "f5").equalTo("f0.f2", "f4", "f5").with(new MultiLegJoiner());
             DataSet<Flight> multiLeg4 = multiLeg2.join(multiLeg2, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where("f2.f2", "f4", "f5").equalTo("f0.f2", "f4", "f5").with(new MultiLegJoiner());
@@ -1577,6 +1338,8 @@ public class FlightConnectionJoiner {
             DataSet<Flight> multiLeg6 = multiLeg3.join(multiLeg3, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where("f2.f2", "f4", "f5").equalTo("f0.f2", "f4", "f5").with(new MultiLegJoiner());
             DataSet<Flight> multiLeg7 = multiLeg3.join(multiLeg4, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where("f2.f2", "f4", "f5").equalTo("f0.f2", "f4", "f5").with(new MultiLegJoiner());
             DataSet<Flight> multiLeg8 = multiLeg4.join(multiLeg4, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where("f2.f2", "f4", "f5").equalTo("f0.f2", "f4", "f5").with(new MultiLegJoiner());
+
+            DataSet<Flight> singleFltNoFlights = join4.union(multiLeg2).union(multiLeg3).union(multiLeg4).union(multiLeg5).union(multiLeg6).union(multiLeg7).union(multiLeg8);
 
             /*
             FileOutputFormat multi2 = new FlightOutput.NonStopFlightOutputFormat(new Path(outputPath+"multileg2/"));
@@ -1592,16 +1355,9 @@ public class FlightConnectionJoiner {
             FileOutputFormat multi7 = new FlightOutput.NonStopFlightOutputFormat(new Path(outputPath+"multileg7/"));
             multiLeg7.write(multi7, outputPath+"multileg7/", WriteMode.OVERWRITE);
             FileOutputFormat multi8 = new FlightOutput.NonStopFlightOutputFormat(new Path(outputPath+"multileg8/"));
-            multiLeg8.write(multi8, outputPath+"multileg8/", WriteMode.OVERWRITE);*/
+            multiLeg8.write(multi8, outputPath+"multileg8/", WriteMode.OVERWRITE);
+            */
 
-            DataSet<Flight> singleFltNoFlights = join4.union(multiLeg2).union(multiLeg3).union(multiLeg4).union(multiLeg5).union(multiLeg6).union(multiLeg7).union(multiLeg8);
-            //int maxIterations = 6;
-            //for (int i = 0; i < maxIterations; i++) {
-            //  state = state.join(state, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where(9,18,19).equalTo(0,18,19).with(new MultiLegJoiner());
-            //  join4.union(state);
-            //}
-            //FileOutputFormat trueOne = new FlightOutput.NonStopFlightOutputFormat(new Path(outputPath+"trueOne/"));
-            //join4.write(trueOne, outputPath+"trueOne/", WriteMode.OVERWRITE);
             FileOutputFormat nonStop = new FlightOutput.NonStopFlightOutputFormat(new Path(outputPath + "one/"));
             singleFltNoFlights.filter(new NonStopTrafficRestrictionsFilter()).write(nonStop, outputPath + "one/", WriteMode.OVERWRITE);
 
@@ -1610,10 +1366,9 @@ public class FlightConnectionJoiner {
 
             env.execute();
         } else {
+            ExecutionEnvironment env = ExecutionEnvironment.getExecutionEnvironment();
 
-            ExecutionEnvironment env2 = ExecutionEnvironment.getExecutionEnvironment();
-
-            DataSet<Flight> singleFltNoFlights2 = env2.readFile(new FlightOutput.NonStopFullInputFormat(), outputPath + "oneFull/");
+            DataSet<Flight> singleFltNoFlights2 = env.readFile(new FlightOutput.NonStopFullInputFormat(), outputPath + "oneFull/");
 
             KeySelector<Flight, String> tl1 = new KeySelector<Flight, String>() {
                 public String getKey(Flight tuple) {
@@ -1630,12 +1385,12 @@ public class FlightConnectionJoiner {
             DataSet<Tuple2<Flight, Flight>> twoLegConnections2 = singleFltNoFlights2.join(singleFltNoFlights2, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE)
                     .where("f2.f2", "f14").equalTo("f0.f2", "f12").with(new FilteringConnectionJoiner());
 
+            DataSet<Tuple2<Flight, Flight>> twoLegConnections = twoLegConnections1.union(twoLegConnections2);
+
             //FileOutputFormat twoLegUF = new FlightOutput.TwoLegFlightOutputFormat(new Path(outputPath+"twoUF/"));
             //twoLegConnections.write(twoLegUF, outputPath+"twoUF/", WriteMode.OVERWRITE);
 
-            DataSet<Tuple2<Flight, Flight>> twoLegConnections = twoLegConnections1.union(twoLegConnections2);
-
-            DataSet<MCTEntry> mctData = env2.readCsvFile(mctPath)
+            DataSet<MCTEntry> mctData = env.readCsvFile(mctPath)
                     .includeFields(true, true, true, true, true, true,
                             true, true, true, true, true, true,
                             true, true, true, true, true, true,
@@ -1643,8 +1398,9 @@ public class FlightConnectionJoiner {
                             false, true).ignoreFirstLine().tupleType(MCTEntry.class);
 
             //mctData.writeAsText(outputPath+"mctOutput/");
+
             DataSet<Tuple2<Flight, Flight>> twoLegConnectionsFiltered = twoLegConnections.coGroup(mctData).where("f0.f2.f0").equalTo(0).with(new MCTFilter());
-            //twoLegConnectionsFiltered.writeAsText(outputPath + "two/", WriteMode.OVERWRITE);
+
             FileOutputFormat twoLeg = new FlightOutput.TwoLegFlightOutputFormat(new Path(outputPath + "two/"));
             twoLegConnectionsFiltered.write(twoLeg, outputPath + "two/", WriteMode.OVERWRITE);
 
@@ -1661,7 +1417,7 @@ public class FlightConnectionJoiner {
 
             DataSet<Tuple3<Flight, Flight, Flight>> threeLegConnections
                     = twoLegConnectionsFiltered.join(twoLegConnectionsFiltered, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where("f1.f0.f0", "f1.f1", "f1.f2.f0", "f1.f4", "f1.f5").equalTo("f0.f0.f0", "f0.f1", "f0.f2.f0", "f0.f4", "f0.f5").with(new ThreeLegJoiner());
-            //threeLegConnections.writeAsText(outputPath+"three/", WriteMode.OVERWRITE);
+
             FileOutputFormat threeLeg = new FlightOutput.ThreeLegFlightOutputFormat(new Path(outputPath + "three/"));
             threeLegConnections.write(threeLeg, outputPath + "three/", WriteMode.OVERWRITE);
 
@@ -1679,12 +1435,14 @@ public class FlightConnectionJoiner {
 
             //union.groupBy(0,1).sum(2).andMax(3).andMin(4).andSum(5).andSum(6).andMin(7).writeAsText(outputPath+"counts/aggregated/", WriteMode.OVERWRITE);
 
-            env2.execute();
+            env.execute();
         }
         //System.out.println(env.getExecutionPlan());
         long end = System.currentTimeMillis();
         LOG.info("Job ended at {} milliseconds. Running Time: {}", end, end-start);
 	}
+
+    /* HELPER FUNCTIONS */
 
     /*
      * distance between two coordinates in kilometers
@@ -1702,6 +1460,18 @@ public class FlightConnectionJoiner {
         return d;
     }
 
+    /**
+     * checks geoDetour for a two-leg flight
+     *
+     * @param originLatitude
+     * @param originLongitude
+     * @param hubLatitude
+     * @param hubLongitude
+     * @param destLatitude
+     * @param destLongitude
+     * @return true if acceptable, otherwise false
+     * @throws Exception
+     */
     private static boolean geoDetourAcceptable(double originLatitude, double originLongitude,
                                                double hubLatitude, double hubLongitude,
                                                double destLatitude, double destLongitude) throws Exception {
@@ -1712,6 +1482,20 @@ public class FlightConnectionJoiner {
         return (legDistanceSum/ODDist) <= computeMaxGeoDetour(ODDist);
     }
 
+    /**
+     * checks geoDetour for a three-leg flight
+     *
+     * @param originLatitude
+     * @param originLongitude
+     * @param hub1Latitude
+     * @param hub1Longitude
+     * @param hub2Latitude
+     * @param hub2Longitude
+     * @param destLatitude
+     * @param destLongitude
+     * @return true if acceptable, otherwise false
+     * @throws Exception
+     */
     private static boolean geoDetourAcceptable(double originLatitude, double originLongitude,
                                                double hub1Latitude, double hub1Longitude,
                                                double hub2Latitude, double hub2Longitude,
@@ -1762,17 +1546,17 @@ public class FlightConnectionJoiner {
     private static String outputPath;
 
     private static boolean parseParameters(String[] args) {
-    if(args.length == 0) {
-        schedulePath = "file:///home/robert/Amadeus/data/week/";//"hdfs:///user/rwaury/input/all_catalog_140410.txt";//
-        oriPath = "file:///home/robert/Amadeus/data/ori_por_public.txt";//"hdfs:///user/rwaury/input/ori_por_public.csv";//
-        regionPath = "file:///home/robert/Amadeus/data/ori_country_region_info.csv";//"hdfs:///user/rwaury/input/ori_country_region_info.csv";//
-        defaultCapacityPath = "file:///home/robert/Amadeus/data/default_capacities.csv";//"hdfs:///user/rwaury/input/default_capacities.csv";//
-        capacityPath = "file:///home/robert/Amadeus/data/capacities_2014-07-01.csv";//"hdfs:///user/rwaury/input/capacities_2014-07-01.csv";//
-        mctPath = "file:///home/robert/Amadeus/data/mct.csv";//"hdfs:///user/rwaury/input/mct.csv";//
-        outputPath = "file:///home/robert/Amadeus/data/resultConnections/";//"hdfs:///user/rwaury/output/flights/";//
-        return true;
-    }
-    if(args.length == 1) {
+        if(args.length == 0) {
+            schedulePath = "file:///home/robert/Amadeus/data/week/";//"hdfs:///user/rwaury/input/all_catalog_140410.txt";//
+            oriPath = "file:///home/robert/Amadeus/data/ori_por_public.txt";//"hdfs:///user/rwaury/input/ori_por_public.csv";//
+            regionPath = "file:///home/robert/Amadeus/data/ori_country_region_info.csv";//"hdfs:///user/rwaury/input/ori_country_region_info.csv";//
+            defaultCapacityPath = "file:///home/robert/Amadeus/data/default_capacities.csv";//"hdfs:///user/rwaury/input/default_capacities.csv";//
+            capacityPath = "file:///home/robert/Amadeus/data/capacities_2014-07-01.csv";//"hdfs:///user/rwaury/input/capacities_2014-07-01.csv";//
+            mctPath = "file:///home/robert/Amadeus/data/mct.csv";//"hdfs:///user/rwaury/input/mct.csv";//
+            outputPath = "file:///home/robert/Amadeus/data/resultConnections/";//"hdfs:///user/rwaury/output/flights/";//
+            return true;
+        }
+        if(args.length == 1) {
             schedulePath = "hdfs:///user/rwaury/input/all_catalog_140410.txt";//
             oriPath = "hdfs:///user/rwaury/input/ori_por_public.csv";//
             regionPath = "hdfs:///user/rwaury/input/ori_country_region_info.csv";//
@@ -1782,15 +1566,8 @@ public class FlightConnectionJoiner {
             outputPath = "hdfs:///user/rwaury/output/flights/";//
             return true;
         }
-    if(args.length == 3) {
-        schedulePath = args[0];
-        oriPath = args[1];
-        outputPath = args[2];
-        return true;
-     } else {
-        System.err.println("Usage: FlightConnectionJoiner <schedule path> <ori path> <output path>");
+        //System.err.println("Usage: FlightConnectionJoiner <schedule path> <ori path> <output path>");
         return false;
-     }
     }
 
 }
