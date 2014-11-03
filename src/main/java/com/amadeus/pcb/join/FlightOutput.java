@@ -20,7 +20,7 @@ public class FlightOutput {
     private static final char DELIM = ',';
     private static final int NEWLINE = '\n';
     private static final Charset charset = Charset.forName("UTF-8");
-    private static final SimpleDateFormat df = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS");
+    //private static final SimpleDateFormat df = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS");
 
     public static class NonStopFlightOutputFormat extends TextOutputFormat<Flight> {
 
@@ -77,7 +77,7 @@ public class FlightOutput {
         Date departure = new Date(flight.getDepartureTimestamp());
         Date arrival = new Date(flight.getArrivalTimestamp());
         return flight.getOriginAirport() + DELIM + flight.getDestinationAirport() + DELIM +
-                df.format(departure) + DELIM + df.format(arrival) + DELIM +
+                departure.toString() + DELIM + arrival.toString() + DELIM +
                 flight.getAirline() + flight.getFlightNumber() + DELIM +
                 flight.getLegCount() + DELIM + flight.getMaxCapacity() + DELIM + flight.getCodeShareInfo();
     }
