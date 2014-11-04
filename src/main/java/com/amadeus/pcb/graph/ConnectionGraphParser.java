@@ -5,8 +5,9 @@ import org.apache.flink.api.common.functions.JoinFunction;
 import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.api.java.DataSet;
 import org.apache.flink.api.java.ExecutionEnvironment;
-import org.apache.flink.api.java.tuple.Tuple7;
+import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.flink.api.java.tuple.Tuple4;
+import org.apache.flink.api.java.tuple.Tuple7;
 import org.apache.flink.core.fs.FileSystem;
 
 public class ConnectionGraphParser {
@@ -24,7 +25,7 @@ public class ConnectionGraphParser {
                 result.f1 = tmp[1].trim();
                 result.f2 = Integer.parseInt(tmp[6].trim());
                 result.f3 = 1;
-            } else if(tmp.length >= 14 && tmp.length <= 16) {
+            } else if(tmp.length == 15 || tmp.length == 16) {
                 result.f0 = tmp[0].trim();
                 result.f1 = tmp[8].trim();
                 int min = Integer.MAX_VALUE;
@@ -36,7 +37,7 @@ public class ConnectionGraphParser {
                 }
                 result.f2 = min;
                 result.f3 = 2;
-            } else if( tmp.length >= 21 && tmp.length <= 24) {
+            } else if( tmp.length == 23 || tmp.length == 24) {
                 result.f0 = tmp[0].trim();
                 result.f1 = tmp[17].trim();
                 int min = Integer.MAX_VALUE;
@@ -90,7 +91,7 @@ public class ConnectionGraphParser {
         DataSet<Tuple4<String, String, Integer, Integer>> one = env.readTextFile(inputPath1).map(new ConnectionParser());
         DataSet<Tuple4<String, String, Integer, Integer>> two = env.readTextFile(inputPath2).map(new ConnectionParser());
         DataSet<Tuple4<String, String, Integer, Integer>> three = env.readTextFile(inputPath3).map(new ConnectionParser());
-        // extract GPS coordinates of all known airports
+
         DataSet<String> rawAirportInfo = env.readTextFile(oriPath);
         DataSet<Tuple7<String, String, String, String, String, Double, Double>> airportCoordinatesNR = rawAirportInfo.flatMap(new FlightConnectionJoiner.AirportCoordinateExtractor());
 
@@ -98,12 +99,15 @@ public class ConnectionGraphParser {
 
         DataSet<Tuple4<String, String, Integer, Integer>> caps = flights.groupBy(0,1,3).sum(2);
 
+        DataSet<Tuple3<String, String, Integer>> capSum = flights.project(0,1,2).types(String.class, String.class, Integer.class).groupBy(0,1).sum(2);
+        capSum.writeAsCsv(capPath, "\n", "^", FileSystem.WriteMode.OVERWRITE).setParallelism(1);
+
         DataSet<Tuple4<String, String, Integer, Integer>> cc1 = caps.join(airportCoordinatesNR).where(0).equalTo(0).with(new CityCodeJoiner1());
         DataSet<Tuple4<String, String, Integer, Integer>> cc2 = cc1.join(airportCoordinatesNR).where(1).equalTo(0).with(new CityCodeJoiner2());
 
         DataSet<Tuple4<String, String, Integer, Integer>> result = cc2.groupBy(0,1,3).sum(2);
 
-        result.writeAsCsv(outputPath, FileSystem.WriteMode.OVERWRITE);
+        result.writeAsCsv(outputPath, "\n", "^", FileSystem.WriteMode.OVERWRITE);
         env.execute();
     }
 
@@ -112,6 +116,7 @@ public class ConnectionGraphParser {
     private static String inputPath2;
     private static String inputPath3;
     private static String outputPath;
+    private static String capPath;
 
     private static boolean parseParameters(String[] args) {
         if (args.length == 0) {
@@ -120,6 +125,7 @@ public class ConnectionGraphParser {
             inputPath2 = "file:///home/robert/Amadeus/data/resultConnections/two/";
             inputPath3 = "file:///home/robert/Amadeus/data/resultConnections/three/";
             outputPath = "file:///home/robert/Amadeus/data/graph/";
+            capPath = "file:///home/robert/Amadeus/data/capacity";
             return true;
         }
         if (args.length == 1) {
@@ -128,6 +134,7 @@ public class ConnectionGraphParser {
             inputPath2 = "hdfs:///user/rwaury/output/flights/two/";
             inputPath3 = "hdfs:///user/rwaury/output/flights/three/";
             outputPath = "hdfs:///user/rwaury/output/graph/";
+            capPath = "hdfs:///user/rwaury/output/capacity";
             return true;
         }
         return false;
