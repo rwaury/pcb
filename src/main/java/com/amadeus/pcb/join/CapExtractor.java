@@ -113,19 +113,20 @@ public class CapExtractor {
             return;
         }
         ExecutionEnvironment env = ExecutionEnvironment.getExecutionEnvironment();
-
         DataSet<Tuple2<Group, Integer>> one = env.readTextFile(inputPath1).map(new ConnectionParser1());
-        DataSet<Tuple3<Group, Group, Integer>> two = env.readTextFile(inputPath2).map(new ConnectionParser2());
-        DataSet<Tuple4<Group, Group, Group, Integer>> three = env.readTextFile(inputPath3).map(new ConnectionParser3());
-
-
         DataSet<Tuple2<Group, Integer>> caps1 = one.groupBy("f0.f0", "f0.f1", "f0.f2").sum(1);
-        DataSet<Tuple3<Group, Group, Integer>> caps2 = two.groupBy("f0.f0", "f0.f1", "f0.f2", "f1.f0", "f1.f1", "f1.f2").sum(2);
-        DataSet<Tuple4<Group, Group, Group, Integer>> caps3 = three.groupBy("f0.f0", "f0.f1", "f0.f2", "f1.f0", "f1.f1", "f1.f2", "f2.f0", "f2.f1", "f2.f2").sum(3);
-
-
         caps1.writeAsCsv(capPath+"one/", "\n", DELIM, FileSystem.WriteMode.OVERWRITE);
+        env.execute();
+
+        env = ExecutionEnvironment.getExecutionEnvironment();
+        DataSet<Tuple3<Group, Group, Integer>> two = env.readTextFile(inputPath2).map(new ConnectionParser2());
+        DataSet<Tuple3<Group, Group, Integer>> caps2 = two.groupBy("f0.f0", "f0.f1", "f0.f2", "f1.f0", "f1.f1", "f1.f2").sum(2);
         caps2.writeAsCsv(capPath+"two/", "\n", DELIM, FileSystem.WriteMode.OVERWRITE);
+        env.execute();
+
+        env = ExecutionEnvironment.getExecutionEnvironment();
+        DataSet<Tuple4<Group, Group, Group, Integer>> three = env.readTextFile(inputPath3).map(new ConnectionParser3());
+        DataSet<Tuple4<Group, Group, Group, Integer>> caps3 = three.groupBy("f0.f0", "f0.f1", "f0.f2", "f1.f0", "f1.f1", "f1.f2", "f2.f0", "f2.f1", "f2.f2").sum(3);
         caps3.writeAsCsv(capPath+"three/", "\n", DELIM, FileSystem.WriteMode.OVERWRITE);
         env.execute();
     }
