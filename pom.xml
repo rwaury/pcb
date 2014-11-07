@@ -49,7 +49,7 @@ under the License.
         	<repository>
             	<id>apache.snapshots</id>
             	<name>Local Apache Flink Snapshot Repository</name>
-            	<url>file://home/robert/Projects/incubator-flink/</url>
+            	<url>file:///home/robert/Projects/incubator-flink/</url>
             	<releases>
                 	<enabled>false</enabled>
             	</releases>
