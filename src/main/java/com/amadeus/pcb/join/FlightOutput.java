@@ -82,10 +82,10 @@ public class FlightOutput {
                 flight.getLegCount() + DELIM + flight.getMaxCapacity() + DELIM + flight.getCodeShareInfo();
     }
 
+
     public static class NonStopFullOutputFormat extends TupleOutputFormat<Flight> {
 
-        @Override
-        protected void serialize(Flight record, DataOutputView out) throws IOException {
+        public static void serializeStatic(Flight record, DataOutputView out) throws IOException {
             record.f0.write(out);
             out.writeLong(record.f1);
             record.f2.write(out);
@@ -102,12 +102,16 @@ public class FlightOutput {
             out.writeInt(record.f13);
             out.writeInt(record.f14);
         }
+
+        @Override
+        protected void serialize(Flight record, DataOutputView out) throws IOException {
+            serializeStatic(record, out);
+        }
     }
 
     public static class NonStopFullInputFormat extends TupleInputFormat<Flight> {
 
-        @Override
-        protected Flight deserialize(Flight reuse, DataInputView in) throws IOException {
+        public static Flight deserializeStatic(Flight reuse, DataInputView in) throws IOException {
             reuse.f0.read(in);
             reuse.f1 = in.readLong();
             reuse.f2.read(in);
@@ -123,6 +127,58 @@ public class FlightOutput {
             reuse.f12 = in.readInt();
             reuse.f13 = in.readInt();
             reuse.f14 = in.readInt();
+            return reuse;
+        }
+
+        @Override
+        protected Flight deserialize(Flight reuse, DataInputView in) throws IOException {
+            return deserializeStatic(reuse, in);
+        }
+    }
+
+
+    public static class TwoLegFullOutputFormat extends TupleOutputFormat<Tuple2<Flight, Flight>> {
+
+        @Override
+        protected void serialize(Tuple2<Flight, Flight> record, DataOutputView out) throws IOException {
+            NonStopFullOutputFormat.serializeStatic(record.f0, out);
+            NonStopFullOutputFormat.serializeStatic(record.f1, out);
+        }
+    }
+
+    public static class TwoLegFullInputFormat extends TupleInputFormat<Tuple2<Flight, Flight>> {
+
+        @Override
+        protected Tuple2<Flight, Flight> deserialize(Tuple2<Flight, Flight> reuse, DataInputView in) throws IOException {
+            Flight f1 = new Flight();
+            reuse.f0 = NonStopFullInputFormat.deserializeStatic(f1, in);
+            Flight f2 = new Flight();
+            reuse.f1 = NonStopFullInputFormat.deserializeStatic(f2, in);
+            return reuse;
+        }
+    }
+
+
+    public static class ThreeLegFullOutputFormat extends TupleOutputFormat<Tuple3<Flight, Flight, Flight>> {
+
+        @Override
+        protected void serialize(Tuple3<Flight, Flight, Flight> record, DataOutputView out) throws IOException {
+            NonStopFullOutputFormat.serializeStatic(record.f0, out);
+            NonStopFullOutputFormat.serializeStatic(record.f1, out);
+            NonStopFullOutputFormat.serializeStatic(record.f2, out);
+        }
+    }
+
+    public static class ThreeLegFullInputFormat extends TupleInputFormat<Tuple3<Flight, Flight, Flight>> {
+
+        @Override
+        protected Tuple3<Flight, Flight, Flight> deserialize(Tuple3<Flight, Flight, Flight> reuse, DataInputView in) throws IOException {
+            Flight f1 = new Flight();
+            reuse.f0 = NonStopFullInputFormat.deserializeStatic(f1, in);
+            Flight f2 = new Flight();
+            reuse.f1 = NonStopFullInputFormat.deserializeStatic(f2, in);
+            Flight f3 = new Flight();
+            reuse.f2 = NonStopFullInputFormat.deserializeStatic(f3, in);
             return reuse;
         }
     }

@@ -8,6 +8,8 @@ import java.io.IOException;
 
 public class GeoInfo extends Tuple8<String, String, String, String, String, String, Double, Double> {
 
+    public static final String DELIM = "^";
+
     public GeoInfo() {super();}
 
     public GeoInfo(String airport, String terminal, String city, String state, String country, String region, Double latitude, Double longitude) {
@@ -56,5 +58,10 @@ public class GeoInfo extends Tuple8<String, String, String, String, String, Stri
         this.f5 = in.readUTF();
         this.f6 = in.readDouble();
         this.f7 = in.readDouble();
+    }
+
+    @Override
+    public String toString() {
+        return this.f0 + DELIM + this.f2 + DELIM + this.f4;
     }
 }

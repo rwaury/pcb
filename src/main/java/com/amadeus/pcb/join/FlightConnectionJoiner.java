@@ -24,6 +24,9 @@ public class FlightConnectionJoiner {
 	public static final long START 	= 1398902400000L;//1398902400000L;
 	public static final long END 	= 1401580800000L;//1399507200000L;//1399020800000L;//
 
+    public static final long WEEK_START = 1399248000000L;
+    public static final long WEEK_END = 1399852800000L;
+
     public static final long MCT_MIN = 10L;
     //public static final long MCT_MAX = 551L;
 
@@ -1102,165 +1105,250 @@ public class FlightConnectionJoiner {
         }
     }
 
-    /**
-     * Statistics for non-stop flights
-     */
-    public static class ODCounter1 implements GroupReduceFunction<Flight, ConnectionStats> {
+    public static class NonStopInternationalFilter implements FilterFunction<Flight> {
 
         @Override
-        public void reduce(Iterable<Flight> values, Collector<ConnectionStats> out) throws Exception {
-            Iterator<Flight> iter = values.iterator();
-            Flight flight = iter.next().clone();
-            ConnectionStats output = new ConnectionStats();
-            output.f0 = flight.getOriginAirport();
-            output.f1 = flight.getDestinationAirport();
-            int count = 1;
-            int invalid = 0;
-            int cap = -1;
-            int max = Integer.MIN_VALUE;
-            int min = Integer.MAX_VALUE;
-            int sum = 0;
-            cap = flight.getMaxCapacity();
-            if (cap > 0) {
-                sum += cap;
-                if (cap < min) {
-                    min = cap;
-                }
-                if (cap > max) {
-                    max = cap;
-                }
+        public boolean filter(Flight value) throws Exception {
+            if(value.getDepartureTimestamp() < WEEK_START || value.getDepartureTimestamp() > WEEK_END) {
+                return false;
             } else {
-                invalid++;
-            }
-            while(iter.hasNext()) {
-                flight = iter.next().clone();
-                count++;
-                cap = flight.getMaxCapacity();
-                if (cap > 0) {
-                    sum += cap;
-                    if (cap < min) {
-                        min = cap;
-                    }
-                    if (cap > max) {
-                        max = cap;
-                    }
-                } else {
-                    invalid++;
-                }
-            }
-            output.f2 = count;
-            output.f3 = max;
-            output.f4 = min;
-            output.f5 = sum;
-            output.f6 = invalid;
-            output.f7 = 1;
-            out.collect(output);
-        }
-    }
-
-    /**
-     * Statistics for two-leg flights
-     */
-    public static class ODCounter2 implements GroupReduceFunction<Tuple2<Flight, Flight>, ConnectionStats> {
-
-        @Override
-        public void reduce(Iterable<Tuple2<Flight, Flight>> values, Collector<ConnectionStats> out) throws Exception {
-            Iterator<Tuple2<Flight, Flight>> iter = values.iterator();
-            Tuple2<Flight, Flight> flight;
-            ConnectionStats output = new ConnectionStats();
-            int count = 0;
-            int invalid = 0;
-            int cap = -1;
-            int max = Integer.MIN_VALUE;
-            int min = Integer.MAX_VALUE;
-            int sum = 0;
-            do {
-                flight = iter.next().copy();
-                count++;
-                cap = getMinCap(flight);
-                if(cap > 0) {
-                    sum += cap;
-                    if(cap < min) {
-                        min = cap;
-                    }
-                    if(cap > max) {
-                        max = cap;
-                    }
-                } else {
-                    invalid++;
-                }
-            } while(iter.hasNext());
-            output.f0 = flight.f0.getOriginAirport();
-            output.f1 = flight.f1.getDestinationAirport();
-            output.f2 = count;
-            output.f3 = max;
-            output.f4 = min;
-            output.f5 = sum;
-            output.f6 = invalid;
-            output.f7 = 2;
-            out.collect(output);
-        }
-
-        private int getMinCap(Tuple2<Flight, Flight> conn) {
-            if(conn.f0.getMaxCapacity() < conn.f1.getMaxCapacity()) {
-                return conn.f0.getMaxCapacity();
-            } else {
-                return conn.f1.getMaxCapacity();
+                return !value.getOriginCountry().equals(value.getDestinationCountry());
             }
         }
     }
 
-    /**
-     * Statistics for three-leg flights
-     */
-    public static class ODCounter3 implements GroupReduceFunction<Tuple3<Flight, Flight, Flight>, ConnectionStats> {
+    public static class TwoLegInternationalFilter implements FilterFunction<Tuple2<Flight, Flight>> {
 
         @Override
-        public void reduce(Iterable<Tuple3<Flight, Flight, Flight>> values, Collector<ConnectionStats> out) throws Exception {
-            Iterator<Tuple3<Flight, Flight, Flight>> iter = values.iterator();
-            Tuple3<Flight, Flight, Flight> flight;
-            ConnectionStats output = new ConnectionStats();
-            int count = 0;
-            int invalid = 0;
-            int cap = -1;
-            int max = Integer.MIN_VALUE;
-            int min = Integer.MAX_VALUE;
-            int sum = 0;
-            do {
-                flight = iter.next().copy();
-                count++;
-                cap = getMinCap(flight);
-                if(cap > 0) {
-                    sum += cap;
-                    if(cap < min) {
-                        min = cap;
-                    }
-                    if(cap > max) {
-                        max = cap;
-                    }
-                } else {
-                    invalid++;
+        public boolean filter(Tuple2<Flight, Flight> value) throws Exception {
+            if(value.f0.getDepartureTimestamp() < WEEK_START || value.f0.getDepartureTimestamp() > WEEK_END) {
+                return false;
+            } else {
+                return !value.f0.getOriginCountry().equals(value.f1.getDestinationCountry());
+            }
+        }
+    }
+
+    public static class ThreeLegInternationalFilter implements FilterFunction<Tuple3<Flight, Flight, Flight>> {
+
+        @Override
+        public boolean filter(Tuple3<Flight, Flight, Flight> value) throws Exception {
+            if(value.f0.getDepartureTimestamp() < WEEK_START || value.f0.getDepartureTimestamp() > WEEK_END) {
+                return false;
+            } else {
+                return !value.f0.getOriginCountry().equals(value.f2.getDestinationCountry());
+            }
+        }
+    }
+
+    public static class CapacityExtractor1 implements GroupReduceFunction<Flight, ODCapacity> {
+
+        @Override
+        public void reduce(Iterable<Flight> flights, Collector<ODCapacity> out) throws Exception {
+            ODCapacity result = new ODCapacity();
+            boolean first = true;
+            int capacity = 0;
+            for (Flight flight : flights) {
+                if(first) {
+                    result.f0 = flight.getOriginCity();
+                    result.f1 = flight.getDestinationCity();
+                    first = false;
                 }
-            } while(iter.hasNext());
-            output.f0 = flight.f0.getOriginAirport();
-            output.f1 = flight.f2.getDestinationAirport();
-            output.f2 = count;
-            output.f3 = max;
-            output.f4 = min;
-            output.f5 = sum;
-            output.f6 = invalid;
-            output.f7 = 3;
-            out.collect(output);
+                capacity += flight.getMaxCapacity();
+            }
+            result.f2 = capacity;
+            out.collect(result);
+        }
+    }
+
+    public static class CapacityExtractor2 implements GroupReduceFunction<Tuple2<Flight, Flight>, ODCapacity> {
+
+        @Override
+        public void reduce(Iterable<Tuple2<Flight, Flight>> connections, Collector<ODCapacity> out) throws Exception {
+            ODCapacity result = new ODCapacity();
+            boolean first = true;
+            int capacity = 0;
+            for (Tuple2<Flight, Flight> connection : connections) {
+                if(first) {
+                    result.f0 = connection.f0.getOriginCity();
+                    result.f1 = connection.f1.getDestinationCity();
+                    first = false;
+                }
+                capacity += getMinCap(connection);
+            }
+            result.f2 = capacity;
+            out.collect(result);
+        }
+    }
+
+    public static class CapacityExtractor3 implements GroupReduceFunction<Tuple3<Flight, Flight, Flight>, ODCapacity> {
+
+        @Override
+        public void reduce(Iterable<Tuple3<Flight, Flight, Flight>> connections, Collector<ODCapacity> out) throws Exception {
+            ODCapacity result = new ODCapacity();
+            boolean first = true;
+            int capacity = 0;
+            for (Tuple3<Flight, Flight, Flight> connection : connections) {
+                if(first) {
+                    result.f0 = connection.f0.getOriginCity();
+                    result.f1 = connection.f2.getDestinationCity();
+                    first = false;
+                }
+                capacity += getMinCap(connection);
+            }
+            result.f2 = capacity;
+            out.collect(result);
+        }
+    }
+
+    public static class CapacityReducer1 implements GroupReduceFunction<Flight, ItineraryInfo.ItineraryInfo1> {
+
+        @Override
+        public void reduce(Iterable<Flight> flights, Collector<ItineraryInfo.ItineraryInfo1> out) throws Exception {
+            ItineraryInfo.ItineraryInfo1 result = new ItineraryInfo.ItineraryInfo1();
+            int travelTime = 0;
+            int minTime = Integer.MAX_VALUE;
+            int maxTime = Integer.MIN_VALUE;
+            int sumTime = 0;
+            int count = 0;
+            boolean first = true;
+            int capacity = 0;
+            for (Flight flight : flights) {
+                if(first) {
+                    result.f0 = flight.f0;
+                    result.f1 = flight.f2;
+                    result.f2 = flight.getAirline();
+                    first = false;
+                }
+                travelTime = (int)((flight.getArrivalTimestamp()-flight.getDepartureTimestamp())/(60L*1000L));
+                sumTime += travelTime;
+                count++;
+                if(travelTime < minTime)
+                    minTime = travelTime;
+                if(travelTime > maxTime)
+                    maxTime = travelTime;
+                capacity += flight.getMaxCapacity();
+            }
+            result.f3 = capacity;
+            result.f5 = minTime;
+            result.f6 = maxTime;
+            result.f7 = sumTime/count;
+            out.collect(result);
+        }
+    }
+
+    public static class CapacityReducer2 implements GroupReduceFunction<Tuple2<Flight, Flight>, ItineraryInfo.ItineraryInfo2> {
+
+        @Override
+        public void reduce(Iterable<Tuple2<Flight, Flight>> connections, Collector<ItineraryInfo.ItineraryInfo2> out) throws Exception {
+            ItineraryInfo.ItineraryInfo2 result = new ItineraryInfo.ItineraryInfo2();
+            int travelTime = 0;
+            int minTime = Integer.MAX_VALUE;
+            int maxTime = Integer.MIN_VALUE;
+            int sumTime = 0;
+            int count = 0;
+            boolean first = true;
+            int capacity = 0;
+            for (Tuple2<Flight, Flight> connection : connections) {
+                if(first) {
+                    result.f0 = connection.f0.f0;
+                    result.f1 = connection.f0.f2;
+                    result.f2 = connection.f0.getAirline();
+                    result.f3 = connection.f1.f0;
+                    result.f4 = connection.f1.f2;
+                    result.f5 = connection.f1.getAirline();
+                    first = false;
+                }
+                travelTime = (int)((connection.f1.getArrivalTimestamp()-connection.f0.getDepartureTimestamp())/(60L*1000L));
+                sumTime += travelTime;
+                count++;
+                if(travelTime < minTime)
+                    minTime = travelTime;
+                if(travelTime > maxTime)
+                    maxTime = travelTime;
+                capacity += getMinCap(connection);
+            }
+            result.f6 = capacity;
+            result.f8 = minTime;
+            result.f9 = maxTime;
+            result.f10 = sumTime/count;
+            out.collect(result);
+        }
+    }
+
+    public static class CapacityReducer3 implements GroupReduceFunction<Tuple3<Flight, Flight, Flight>, ItineraryInfo.ItineraryInfo3> {
+
+        @Override
+        public void reduce(Iterable<Tuple3<Flight, Flight, Flight>> connections, Collector<ItineraryInfo.ItineraryInfo3> out) throws Exception {
+            ItineraryInfo.ItineraryInfo3 result = new ItineraryInfo.ItineraryInfo3();
+            int travelTime = 0;
+            int minTime = Integer.MAX_VALUE;
+            int maxTime = Integer.MIN_VALUE;
+            int sumTime = 0;
+            int count = 0;
+            boolean first = true;
+            int capacity = 0;
+            for (Tuple3<Flight, Flight, Flight> connection : connections) {
+                if(first) {
+                    result.f0 = connection.f0.f0;
+                    result.f1 = connection.f0.f2;
+                    result.f2 = connection.f0.getAirline();
+                    result.f3 = connection.f1.f0;
+                    result.f4 = connection.f1.f2;
+                    result.f5 = connection.f1.getAirline();
+                    result.f6 = connection.f2.f0;
+                    result.f7 = connection.f2.f2;
+                    result.f8 = connection.f2.getAirline();
+                    first = false;
+                }
+                travelTime = (int)((connection.f2.getArrivalTimestamp()-connection.f0.getDepartureTimestamp())/(60L*1000L));
+                sumTime += travelTime;
+                count++;
+                if(travelTime < minTime)
+                    minTime = travelTime;
+                if(travelTime > maxTime)
+                    maxTime = travelTime;
+                capacity += getMinCap(connection);
+            }
+            result.f9 = capacity;
+            result.f11 = minTime;
+            result.f12 = maxTime;
+            result.f13 = sumTime/count;
+            out.collect(result);
         }
 
-        private int getMinCap(Tuple3<Flight, Flight, Flight> conn) {
-            if(conn.f0.getMaxCapacity() <= conn.f1.getMaxCapacity() && conn.f0.getMaxCapacity() <= conn.f2.getMaxCapacity()) {
-                return conn.f0.getMaxCapacity();
-            } else if(conn.f1.getMaxCapacity() <= conn.f0.getMaxCapacity() && conn.f1.getMaxCapacity() <= conn.f2.getMaxCapacity()){
-                return conn.f1.getMaxCapacity();
-            } else {
-                return conn.f2.getMaxCapacity();
-            }
+    }
+
+    public static class CapShareJoiner1 implements JoinFunction<ItineraryInfo.ItineraryInfo1, ODCapacity, ItineraryInfo.ItineraryInfo1> {
+
+        @Override
+        public ItineraryInfo.ItineraryInfo1 join(ItineraryInfo.ItineraryInfo1 itineraryInfo1, ODCapacity odCapacity) throws Exception {
+            int capacity = itineraryInfo1.f3;
+            double share = (double)capacity/(double)odCapacity.f2;
+            itineraryInfo1.f4 = share;
+            return itineraryInfo1;
+        }
+    }
+
+    public static class CapShareJoiner2 implements JoinFunction<ItineraryInfo.ItineraryInfo2, ODCapacity, ItineraryInfo.ItineraryInfo2> {
+
+        @Override
+        public ItineraryInfo.ItineraryInfo2 join(ItineraryInfo.ItineraryInfo2 itineraryInfo2, ODCapacity odCapacity) throws Exception {
+            int capacity = itineraryInfo2.f6;
+            double share = (double)capacity/(double)odCapacity.f2;
+            itineraryInfo2.f7 = share;
+            return itineraryInfo2;
+        }
+    }
+
+    public static class CapShareJoiner3 implements JoinFunction<ItineraryInfo.ItineraryInfo3, ODCapacity, ItineraryInfo.ItineraryInfo3> {
+
+        @Override
+        public ItineraryInfo.ItineraryInfo3 join(ItineraryInfo.ItineraryInfo3 itineraryInfo3, ODCapacity odCapacity) throws Exception {
+            int capacity = itineraryInfo3.f9;
+            double share = (double)capacity/(double)odCapacity.f2;
+            itineraryInfo3.f10 = share;
+            return itineraryInfo3;
         }
     }
 
@@ -1270,12 +1358,12 @@ public class FlightConnectionJoiner {
         if(!parseParameters(args)) {
             return;
         }
-        boolean first = false;
+        int phase = 0;
         if(args.length == 1) {
-            first = Boolean.parseBoolean(args[0]);
+            phase = Integer.parseInt(args[0]);
         }
         // the program is split into two parts (building and parsing all non-stop connections, and finding multi-leg flights)
-        if(first) {
+        if(phase == 0) {
             ExecutionEnvironment env = ExecutionEnvironment.getExecutionEnvironment();
 
             // get all relevant schedule data
@@ -1385,8 +1473,8 @@ public class FlightConnectionJoiner {
             FileOutputFormat nonStopFull = new FlightOutput.NonStopFullOutputFormat();
             singleFltNoFlights.write(nonStopFull, outputPath + "oneFull/", WriteMode.OVERWRITE);
 
-            env.execute();
-        } else {
+            env.execute("Phase 0");
+        } else if (phase == 1) {
             ExecutionEnvironment env = ExecutionEnvironment.getExecutionEnvironment();
 
             DataSet<Flight> singleFltNoFlights2 = env.readFile(new FlightOutput.NonStopFullInputFormat(), outputPath + "oneFull/");
@@ -1425,6 +1513,9 @@ public class FlightConnectionJoiner {
             FileOutputFormat twoLeg = new FlightOutput.TwoLegFlightOutputFormat(new Path(outputPath + "two/"));
             twoLegConnectionsFiltered.write(twoLeg, outputPath + "two/", WriteMode.OVERWRITE);
 
+            FileOutputFormat twoLegFull = new FlightOutput.TwoLegFullOutputFormat();
+            twoLegConnectionsFiltered.write(twoLegFull, outputPath + "twoFull/", WriteMode.OVERWRITE);
+
             KeySelector<Tuple2<Flight, Flight>, String> ks0 = new KeySelector<Tuple2<Flight, Flight>, String>() {
                 public String getKey(Tuple2<Flight, Flight> tuple) {
                     return tuple.f0.getKey();
@@ -1442,6 +1533,9 @@ public class FlightConnectionJoiner {
             FileOutputFormat threeLeg = new FlightOutput.ThreeLegFlightOutputFormat(new Path(outputPath + "three/"));
             threeLegConnections.write(threeLeg, outputPath + "three/", WriteMode.OVERWRITE);
 
+            FileOutputFormat threeLegFull = new FlightOutput.ThreeLegFullOutputFormat();
+            threeLegConnections.write(threeLegFull, outputPath + "threeFull/", WriteMode.OVERWRITE);
+
             //DataSet<ConnectionStats> ODCounts1 = join4.groupBy(0,9).reduceGroup(new ODCounter1());
             //ODCounts1.writeAsText(outputPath+"counts/one/", WriteMode.OVERWRITE);
 
@@ -1456,7 +1550,47 @@ public class FlightConnectionJoiner {
 
             //union.groupBy(0,1).sum(2).andMax(3).andMin(4).andSum(5).andSum(6).andMin(7).writeAsText(outputPath+"counts/aggregated/", WriteMode.OVERWRITE);
 
-            env.execute();
+            env.execute("Phase 1");
+        } else if(phase == 2) {
+            ExecutionEnvironment env = ExecutionEnvironment.getExecutionEnvironment();
+
+            DataSet<Flight> nonStopConnections = env.readFile(new FlightOutput.NonStopFullInputFormat(), outputPath + "oneFull/");
+            DataSet<Tuple2<Flight, Flight>> twoLegConnections = env.readFile(new FlightOutput.TwoLegFullInputFormat(), outputPath + "twoFull/");
+            DataSet<Tuple3<Flight, Flight, Flight>> threeLegConnections = env.readFile(new FlightOutput.ThreeLegFullInputFormat(), outputPath + "threeFull/");
+
+
+            DataSet<ODCapacity> nonStopCaps = nonStopConnections.filter(new NonStopInternationalFilter())
+                    .groupBy("f0.f2", "f2.f2").reduceGroup(new CapacityExtractor1());
+            DataSet<ODCapacity> twoLegCaps = twoLegConnections.filter(new TwoLegInternationalFilter())
+                    .groupBy("f0.f0.f2", "f1.f2.f2").reduceGroup(new CapacityExtractor2());
+            DataSet<ODCapacity> threeLegCaps = threeLegConnections.filter(new ThreeLegInternationalFilter())
+                    .groupBy("f0.f0.f2", "f2.f2.f2").reduceGroup(new CapacityExtractor3());
+
+            DataSet<ODCapacity> ODCaps = nonStopCaps.union(twoLegCaps).union(threeLegCaps).groupBy(0,1).sum(2);
+
+            ODCaps.writeAsCsv(outputPath + "ODCaps/", "\n", "^", WriteMode.OVERWRITE);
+
+            // group keys: origin, destination, airline
+            DataSet<ItineraryInfo.ItineraryInfo1> ii1 = nonStopConnections.filter(new NonStopInternationalFilter())
+                    .groupBy("f0.f0", "f2.f0", "f4").reduceGroup(new CapacityReducer1())
+                    .join(ODCaps, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where("f0.f2", "f1.f2").equalTo(0,1).with(new CapShareJoiner1());
+            // group keys: origin, destination, airline, origin, destination, airline
+            DataSet<ItineraryInfo.ItineraryInfo2> ii2 = twoLegConnections.filter(new TwoLegInternationalFilter())
+                    .groupBy("f0.f0.f0", "f0.f2.f0", "f0.f4", "f1.f0.f0", "f1.f2.f0", "f1.f4").reduceGroup(new CapacityReducer2())
+                    .join(ODCaps, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where("f0.f2", "f4.f2").equalTo(0, 1).with(new CapShareJoiner2());
+            // group keys: origin, destination, airline, origin, destination, airline, origin, destination, airline
+            DataSet<ItineraryInfo.ItineraryInfo3> ii3 = threeLegConnections.filter(new ThreeLegInternationalFilter())
+                    .groupBy("f0.f0.f0", "f0.f2.f0", "f0.f4", "f1.f0.f0", "f1.f2.f0", "f1.f4", "f2.f0.f0", "f2.f2.f0", "f2.f4").reduceGroup(new CapacityReducer3())
+                    .join(ODCaps, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where("f0.f2", "f7.f2").equalTo(0, 1).with(new CapShareJoiner3());;
+
+
+            ii1.writeAsCsv(outputPath + "itinerary/one/", "\n", GeoInfo.DELIM, WriteMode.OVERWRITE);
+            ii2.writeAsCsv(outputPath + "itinerary/two/", "\n", GeoInfo.DELIM, WriteMode.OVERWRITE);
+            ii3.writeAsCsv(outputPath + "itinerary/three/", "\n", GeoInfo.DELIM, WriteMode.OVERWRITE);
+
+            env.execute("Phase 2");
+        } else {
+            throw new Exception("Invalid parameter! phase: " + phase);
         }
         //System.out.println(env.getExecutionPlan());
         long end = System.currentTimeMillis();
@@ -1464,6 +1598,24 @@ public class FlightConnectionJoiner {
 	}
 
     /* HELPER FUNCTIONS */
+
+    public static int getMinCap(Tuple2<Flight, Flight> conn) {
+        if(conn.f0.getMaxCapacity() < conn.f1.getMaxCapacity()) {
+            return conn.f0.getMaxCapacity();
+        } else {
+            return conn.f1.getMaxCapacity();
+        }
+    }
+
+    public static int getMinCap(Tuple3<Flight, Flight, Flight> conn) {
+        if(conn.f0.getMaxCapacity() <= conn.f1.getMaxCapacity() && conn.f0.getMaxCapacity() <= conn.f2.getMaxCapacity()) {
+            return conn.f0.getMaxCapacity();
+        } else if(conn.f1.getMaxCapacity() <= conn.f0.getMaxCapacity() && conn.f1.getMaxCapacity() <= conn.f2.getMaxCapacity()){
+            return conn.f1.getMaxCapacity();
+        } else {
+            return conn.f2.getMaxCapacity();
+        }
+    }
 
     /*
      * distance between two coordinates in kilometers
@@ -1557,6 +1709,154 @@ public class FlightConnectionJoiner {
         return (ODDist*60.0)/100.0;
     }
 
+    /**
+     * Class graveyard
+     */
+
+    /**
+     * Statistics for non-stop flights
+     */
+    public static class ODCounter1 implements GroupReduceFunction<Flight, ConnectionStats> {
+
+        @Override
+        public void reduce(Iterable<Flight> values, Collector<ConnectionStats> out) throws Exception {
+            Iterator<Flight> iter = values.iterator();
+            Flight flight = iter.next().clone();
+            ConnectionStats output = new ConnectionStats();
+            output.f0 = flight.getOriginAirport();
+            output.f1 = flight.getDestinationAirport();
+            int count = 1;
+            int invalid = 0;
+            int cap = -1;
+            int max = Integer.MIN_VALUE;
+            int min = Integer.MAX_VALUE;
+            int sum = 0;
+            cap = flight.getMaxCapacity();
+            if (cap > 0) {
+                sum += cap;
+                if (cap < min) {
+                    min = cap;
+                }
+                if (cap > max) {
+                    max = cap;
+                }
+            } else {
+                invalid++;
+            }
+            while(iter.hasNext()) {
+                flight = iter.next().clone();
+                count++;
+                cap = flight.getMaxCapacity();
+                if (cap > 0) {
+                    sum += cap;
+                    if (cap < min) {
+                        min = cap;
+                    }
+                    if (cap > max) {
+                        max = cap;
+                    }
+                } else {
+                    invalid++;
+                }
+            }
+            output.f2 = count;
+            output.f3 = max;
+            output.f4 = min;
+            output.f5 = sum;
+            output.f6 = invalid;
+            output.f7 = 1;
+            out.collect(output);
+        }
+    }
+
+    /**
+     * Statistics for two-leg flights
+     */
+    public static class ODCounter2 implements GroupReduceFunction<Tuple2<Flight, Flight>, ConnectionStats> {
+
+        @Override
+        public void reduce(Iterable<Tuple2<Flight, Flight>> values, Collector<ConnectionStats> out) throws Exception {
+            Iterator<Tuple2<Flight, Flight>> iter = values.iterator();
+            Tuple2<Flight, Flight> flight;
+            ConnectionStats output = new ConnectionStats();
+            int count = 0;
+            int invalid = 0;
+            int cap = -1;
+            int max = Integer.MIN_VALUE;
+            int min = Integer.MAX_VALUE;
+            int sum = 0;
+            do {
+                flight = iter.next().copy();
+                count++;
+                cap = getMinCap(flight);
+                if (cap > 0) {
+                    sum += cap;
+                    if (cap < min) {
+                        min = cap;
+                    }
+                    if (cap > max) {
+                        max = cap;
+                    }
+                } else {
+                    invalid++;
+                }
+            } while (iter.hasNext());
+            output.f0 = flight.f0.getOriginAirport();
+            output.f1 = flight.f1.getDestinationAirport();
+            output.f2 = count;
+            output.f3 = max;
+            output.f4 = min;
+            output.f5 = sum;
+            output.f6 = invalid;
+            output.f7 = 2;
+            out.collect(output);
+        }
+    }
+
+    /**
+     * Statistics for three-leg flights
+     */
+    public static class ODCounter3 implements GroupReduceFunction<Tuple3<Flight, Flight, Flight>, ConnectionStats> {
+
+        @Override
+        public void reduce(Iterable<Tuple3<Flight, Flight, Flight>> values, Collector<ConnectionStats> out) throws Exception {
+            Iterator<Tuple3<Flight, Flight, Flight>> iter = values.iterator();
+            Tuple3<Flight, Flight, Flight> flight;
+            ConnectionStats output = new ConnectionStats();
+            int count = 0;
+            int invalid = 0;
+            int cap = -1;
+            int max = Integer.MIN_VALUE;
+            int min = Integer.MAX_VALUE;
+            int sum = 0;
+            do {
+                flight = iter.next().copy();
+                count++;
+                cap = getMinCap(flight);
+                if(cap > 0) {
+                    sum += cap;
+                    if(cap < min) {
+                        min = cap;
+                    }
+                    if(cap > max) {
+                        max = cap;
+                    }
+                } else {
+                    invalid++;
+                }
+            } while(iter.hasNext());
+            output.f0 = flight.f0.getOriginAirport();
+            output.f1 = flight.f2.getDestinationAirport();
+            output.f2 = count;
+            output.f3 = max;
+            output.f4 = min;
+            output.f5 = sum;
+            output.f6 = invalid;
+            output.f7 = 3;
+            out.collect(output);
+        }
+    }
+
 
     private static String schedulePath;
     private static String oriPath;
@@ -1590,5 +1890,7 @@ public class FlightConnectionJoiner {
         //System.err.println("Usage: FlightConnectionJoiner <schedule path> <ori path> <output path>");
         return false;
     }
+
+
 
 }

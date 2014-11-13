@@ -31,12 +31,12 @@ public class Flight extends Tuple15<GeoInfo, Long, GeoInfo, Long,
         this.f7 = maxCapacity;
         this.f8 = codeshareInfo;
         this.f9 = trafficRestriction;
-        // the last GeoInfo field is redundant for most flights but required for merged multileg flights
+        // the last GeoInfo field is redundant for most flights but required for merged multi-leg flights
         this.f10 = new GeoInfo(originAirport, originTerminal, originCity, originState, originCountry, originRegion, originLatitude, originLongitude);
         this.f11 = 1; // number of legs
         this.f12 = FlightConnectionJoiner.getFirstWindow(departureTimestamp); // dep window
-        this.f13 = FlightConnectionJoiner.getFirstWindow(arrivalTimestamp);; // arr window 1
-        this.f14 = FlightConnectionJoiner.getSecondWindow(arrivalTimestamp);; // arr window 2
+        this.f13 = FlightConnectionJoiner.getFirstWindow(arrivalTimestamp); // arr window 1
+        this.f14 = FlightConnectionJoiner.getSecondWindow(arrivalTimestamp); // arr window 2
     }
 
     private Flight(Tuple15<GeoInfo, Long, GeoInfo, Long,
