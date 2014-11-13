@@ -32,7 +32,7 @@ under the License.
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 	</properties>
 
-	<!--<repositories>
+	<repositories>
 		<repository>
 			<id>apache.snapshots</id>
 			<name>Apache Development Snapshot Repository</name>
@@ -44,8 +44,8 @@ under the License.
 				<enabled>true</enabled>
 			</snapshots>
 		</repository>
-	</repositories>-->
-	<repositories>
+	</repositories>
+	<!--<repositories>
         	<repository>
             	<id>apache.snapshots</id>
             	<name>Local Apache Flink Snapshot Repository</name>
@@ -57,7 +57,7 @@ under the License.
                 	<enabled>true</enabled>
             	</snapshots>
         	</repository>
-    	</repositories>
+    	</repositories>-->
 	
 	<!-- These two requirements are the minimum to use and develop Flink. 
 		You can add others like <artifactId>pact-scala-core</artifactId> for Scala! -->

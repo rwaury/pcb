@@ -11,14 +11,14 @@ public class SubGraphFinder {
     private static final long SEED = 1337L;
 
     private static int COUNT1 = 32;
-    private static int SHINGLE_SIZE1 = 4;
+    private static int SHINGLE_SIZE1 = 3;
     private static int COUNT2 = 32;
-    private static int SHINGLE_SIZE2 = 4;
+    private static int SHINGLE_SIZE2 = 3;
 
 
     private final static String DELIM = ",";
 
-    private final static String path = "/home/robert/Amadeus/data/query_result.csv";
+    private final static String path = "/home/robert/Amadeus/data/query_result2.csv";
 
 
     public static void main(String[] args) throws Exception {
@@ -138,13 +138,16 @@ public class SubGraphFinder {
             for(Integer s : e.getValue()) {
                 airports.addAll(shingleToAirports.get(s));
             }
-            if(airports.size() > 4) {
+            ArrayList<String> apList = new ArrayList<String>();
+            apList.addAll(airports);
+            if(airports.size() > 9) {
                 System.out.println(e.getKey() + ":");
                 System.out.println(airports);
+                System.out.println(pairwiseJaccardAvg(apList, airportToAirports));
                 cCnt++;
             }
         }
-        System.out.println("Components: " + qf.components() + " Components with more than 4 members: " + cCnt);
+        System.out.println("Components: " + qf.components() + " Components with more than 9 members: " + cCnt);
     }
 
     private static <C extends Comparable> ArrayList<Integer> shingle(Collection<C> neighborsIn, int s, int c) {
@@ -290,6 +293,68 @@ public class SubGraphFinder {
                 }
             }
             return clusters;
+        }
+    }
+
+    private static JInfo pairwiseJaccardAvg(ArrayList<String> nodes, HashMap<String, HashSet<String>> neighbors) {
+        double sum = 0.0;
+        double min = Double.MAX_VALUE;
+        double max = Double.MIN_VALUE;
+        int count = 0;
+        for(int i = 0; i < nodes.size(); i++) {
+            for(int j = 0; j < nodes.size(); j++) {
+                if(i != j) {
+                    double jIdx = jaccard(neighbors.get(nodes.get(i)), neighbors.get(nodes.get(j)));
+                    sum += jIdx;
+                    if (jIdx < min) {
+                        min = jIdx;
+                    }
+                    if (jIdx > max) {
+                        max = jIdx;
+                    }
+                    count++;
+                }
+            }
+        }
+        JInfo result = new JInfo();
+        result.min = min;
+        result.max = max;
+        result.avg = sum/count;
+        return result;
+    }
+
+    private static double jaccard(HashSet<String> a, HashSet<String> b) {
+        int aCnt = a.size();
+        int bCnt = b.size();
+        if(aCnt == 0 ^ bCnt == 0) {
+            return 0.0;
+        }
+        if(aCnt == 0 && bCnt == 0) {
+            return 1.0;
+        }
+        HashSet<String> union = new HashSet<String>();
+        union.addAll(a);
+        union.addAll(b);
+        int uSize = union.size();
+        HashSet<String> intersection = new HashSet<String>();
+        intersection.addAll(a);
+        intersection.retainAll(b);
+        int iSize = intersection.size();
+        return (double)iSize/(double)uSize;
+    }
+
+    public static class JInfo {
+
+        double min;
+        double max;
+        double avg;
+
+        public JInfo() {}
+
+
+        @Override
+        public String toString() {
+            return "min: " + min + " max: " + max + " avg: " + avg;
         }
     }
 }
