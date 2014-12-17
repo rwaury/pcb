@@ -62,6 +62,6 @@ public class GeoInfo extends Tuple8<String, String, String, String, String, Stri
 
     @Override
     public String toString() {
-        return this.f0 + DELIM + this.f2 + DELIM + this.f4;
+        return this.f0;
     }
 }

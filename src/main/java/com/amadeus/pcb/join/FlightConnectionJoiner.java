@@ -2,6 +2,7 @@ package com.amadeus.pcb.join;
 
 import org.apache.flink.api.common.functions.*;
 import org.apache.flink.api.common.io.FileOutputFormat;
+import org.apache.flink.api.common.operators.Order;
 import org.apache.flink.api.common.operators.base.JoinOperatorBase;
 import org.apache.flink.api.java.DataSet;
 import org.apache.flink.api.java.ExecutionEnvironment;
@@ -21,8 +22,8 @@ public class FlightConnectionJoiner {
 
     public static final Logger LOG = LoggerFactory.getLogger(FlightConnectionJoiner.class);
 
-	public static final long START 	= 1398902400000L;//1398902400000L;
-	public static final long END 	= 1401580800000L;//1399507200000L;//1399020800000L;//
+    public static final long START = 1398902400000L;//1398902400000L;
+    public static final long END = 1401580800000L;//1399507200000L;//1399020800000L;//
 
     public static final long WEEK_START = 1399248000000L;
     public static final long WEEK_END = 1399852800000L;
@@ -33,10 +34,10 @@ public class FlightConnectionJoiner {
     public static final Character EMPTY = new Character(' ');
 
     public static final long WINDOW_SIZE = 48L * 60L * 60L * 1000L; // 48 hours
-    public static final int MAX_WINDOW_ID = (int)Math.ceil((2.0*(END-START))/(double)WINDOW_SIZE);
+    public static final int MAX_WINDOW_ID = (int) Math.ceil((2.0 * (END - START)) / (double) WINDOW_SIZE);
 
     public static int getFirstWindow(long timestamp) {
-        int windowIndex = (int)(2L*(timestamp-START) / WINDOW_SIZE);
+        int windowIndex = (int) (2L * (timestamp - START) / WINDOW_SIZE);
         return windowIndex;
     }
 
@@ -53,104 +54,114 @@ public class FlightConnectionJoiner {
     // Tuple19<String, String, String, String, Double, Double, Long, String, String, String, String, Double, Double, Long, String, Integer, String, Integer, String>
 
     //Tuple12<String, String, String, Integer, Long, Long, Double, Double, String, Double, Double, String, String , String, String>
-	//origin, destination, airline, flight number, departure, arrival, originLat, originLong, originCountry, destinationLat, destinationLong, destinationCountry, originTerminal, destinationTerminal, codeshareInfo
+    //origin, destination, airline, flight number, departure, arrival, originLat, originLong, originCountry, destinationLat, destinationLong,
+    //destinationCountry, originTerminal, destinationTerminal, codeshareInfo
 
-	@SuppressWarnings("serial")
-	public static class FilteringUTCExtractor implements 
-	FlatMapFunction<String, Flight> {
-		
-		String[] tmp = null;
-		
-		Calendar cal = Calendar.getInstance(TimeZone.getTimeZone("GMT+0000"), Locale.FRENCH);
-		
-		SimpleDateFormat format = new SimpleDateFormat("yyMMddHHmm");
-		
-		Date earliest = new Date(START);
-		Date latest = new Date(END);
-		
-		private final static ArrayList<String> nonAirCraftList = new ArrayList<String>() {{
-			add("AGH");add("BH2");add("BUS");add("ICE");
-			add("LCH");add("LMO");add("MD9");add("NDE");
-			add("S61");add("S76");add("TRN");add("TSL");
-			}};
-		
-		public void flatMap(String value, Collector<Flight> out) throws Exception {
+    @SuppressWarnings("serial")
+    public static class FilteringUTCExtractor implements
+            FlatMapFunction<String, Flight> {
+
+        String[] tmp = null;
+
+        Calendar cal = Calendar.getInstance(TimeZone.getTimeZone("GMT+0000"), Locale.FRENCH);
+
+        SimpleDateFormat format = new SimpleDateFormat("yyMMddHHmm");
+
+        Date earliest = new Date(START);
+        Date latest = new Date(END);
+
+        private final static ArrayList<String> nonAirCraftList = new ArrayList<String>() {{
+            add("AGH");
+            add("BH2");
+            add("BUS");
+            add("ICE");
+            add("LCH");
+            add("LMO");
+            add("MD9");
+            add("NDE");
+            add("S61");
+            add("S76");
+            add("TRN");
+            add("TSL");
+        }};
+
+        public void flatMap(String value, Collector<Flight> out) throws Exception {
             // TODO: check for service type SSIM p.483
-			tmp = value.split("\\^");
-            if(tmp[0].trim().startsWith("#")) {
+            tmp = value.split("\\^");
+            if (tmp[0].trim().startsWith("#")) {
                 // header
                 return;
             }
             String aircraft = tmp[9].trim();
-            if(nonAirCraftList.contains(aircraft)) {
+            if (nonAirCraftList.contains(aircraft)) {
                 // not an aircraft
                 return;
             }
-			String localDepartureDate = tmp[0].trim();
-			String localDepartureTime = tmp[3].trim();
-			String localDepartureOffset = tmp[4].trim();
-			Date departure = format.parse(localDepartureDate + localDepartureTime);
-			cal.setTime(departure);
-			int sign = 0;
-			if(localDepartureOffset.startsWith("-")) {
-				sign = 1;
-			} else if(localDepartureOffset.startsWith("+")) {
-				sign = -1;
-			} else {
-				throw new Exception("Parse error. Wrong sign! Original String: " + value);
-			}
-			int hours = Integer.parseInt(localDepartureOffset.substring(1, 3));
-			int minutes = Integer.parseInt(localDepartureOffset.substring(3, 5));
-			cal.add(Calendar.HOUR_OF_DAY, sign*hours);
-			cal.add(Calendar.MINUTE, sign*minutes);
-			departure = cal.getTime();
-			if(departure.before(earliest) || departure.after(latest)) {
-				return;
-			}
-			if(tmp.length > 37 && !tmp[37].trim().isEmpty()) {
-				// not an operating carrier
-				return;
-			}
-			String localArrivalTime = tmp[5].trim();
-			String localArrivalOffset = tmp[6].trim();
-			String dateChange = tmp[7].trim();
-			Date arrival = format.parse(localDepartureDate + localArrivalTime);
-			cal.setTime(arrival);
-			if(!dateChange.equals("0")) {
-				if(dateChange.equals("1")) {
-					cal.add(Calendar.DAY_OF_YEAR, 1);
-				} else if(dateChange.equals("2")) {
-					cal.add(Calendar.DAY_OF_YEAR, 2);
-				} else if(dateChange.equals("A") || dateChange.equals("J") || dateChange.equals("-1")) {
-					cal.add(Calendar.DAY_OF_YEAR, -1);
-				} else {
-					throw new Exception("Unknown arrival_date_variation modifier: " + dateChange + " original string: " + value);
-				}
-			}
-			if(localArrivalOffset.startsWith("-")) {
-				sign = 1;
-			} else if(localArrivalOffset.startsWith("+")) {
-				sign = -1;
-			} else {
-				throw new Exception("Parse error. Wrong sign!");
-			}
-			hours = Integer.parseInt(localArrivalOffset.substring(1, 3));
-			minutes = Integer.parseInt(localArrivalOffset.substring(3, 5));
-			cal.add(Calendar.HOUR_OF_DAY, sign*hours);
-			cal.add(Calendar.MINUTE, sign*minutes);
-			arrival = cal.getTime();
-			// sanity check
-			if(arrival.before(departure) || arrival.equals(departure)) {
-				return;
-				/*throw new Exception("Sanity check failed! Arrival equal to or earlier than departure.\n" +
+            String localDepartureDate = tmp[0].trim();
+            String localDepartureTime = tmp[3].trim();
+            String localDepartureOffset = tmp[4].trim();
+            Date departure = format.parse(localDepartureDate + localDepartureTime);
+            cal.setTime(departure);
+            int sign = 0;
+            if (localDepartureOffset.startsWith("-")) {
+                sign = 1;
+            } else if (localDepartureOffset.startsWith("+")) {
+                sign = -1;
+            } else {
+                throw new Exception("Parse error. Wrong sign! Original String: " + value);
+            }
+            int hours = Integer.parseInt(localDepartureOffset.substring(1, 3));
+            int minutes = Integer.parseInt(localDepartureOffset.substring(3, 5));
+            cal.add(Calendar.HOUR_OF_DAY, sign * hours);
+            cal.add(Calendar.MINUTE, sign * minutes);
+            departure = cal.getTime();
+            if (departure.before(earliest) || departure.after(latest)) {
+                return;
+            }
+            if (tmp.length > 37 && !tmp[37].trim().isEmpty()) {
+                // not an operating carrier
+                return;
+            }
+            String localArrivalTime = tmp[5].trim();
+            String localArrivalOffset = tmp[6].trim();
+            String dateChange = tmp[7].trim();
+            Date arrival = format.parse(localDepartureDate + localArrivalTime);
+            cal.setTime(arrival);
+            if (!dateChange.equals("0")) {
+                if (dateChange.equals("1")) {
+                    cal.add(Calendar.DAY_OF_YEAR, 1);
+                } else if (dateChange.equals("2")) {
+                    cal.add(Calendar.DAY_OF_YEAR, 2);
+                } else if (dateChange.equals("A") || dateChange.equals("J") || dateChange.equals("-1")) {
+                    cal.add(Calendar.DAY_OF_YEAR, -1);
+                } else {
+                    throw new Exception("Unknown arrival_date_variation modifier: " + dateChange + " original string: " + value);
+                }
+            }
+            if (localArrivalOffset.startsWith("-")) {
+                sign = 1;
+            } else if (localArrivalOffset.startsWith("+")) {
+                sign = -1;
+            } else {
+                throw new Exception("Parse error. Wrong sign!");
+            }
+            hours = Integer.parseInt(localArrivalOffset.substring(1, 3));
+            minutes = Integer.parseInt(localArrivalOffset.substring(3, 5));
+            cal.add(Calendar.HOUR_OF_DAY, sign * hours);
+            cal.add(Calendar.MINUTE, sign * minutes);
+            arrival = cal.getTime();
+            // sanity check
+            if (arrival.before(departure) || arrival.equals(departure)) {
+                return;
+                /*throw new Exception("Sanity check failed! Arrival equal to or earlier than departure.\n" +
 						"Departure: " + departure.toString() + " Arrival: " + arrival.toString() + "\n"  + 
 						"Sign: " + sign + " Hours: " + hours + " Minutes: " + minutes + "\n" +
 						"Original value: " + value);*/
-			}
+            }
             String codeshareInfo = "";
-            if(tmp.length > 36) {
+            if (tmp.length > 36) {
                 codeshareInfo = tmp[36].trim();
-                if(codeshareInfo.length() > 2) {
+                if (codeshareInfo.length() > 2) {
                     // first two letters don't contain flight information
                     codeshareInfo = codeshareInfo.substring(2);
                 }
@@ -161,57 +172,57 @@ public class FlightConnectionJoiner {
             String destinationTerminal = tmp[20].trim();
             String airline = tmp[13].trim();
             Character trafficRestriction = EMPTY;
-            if(!tmp[12].trim().isEmpty()) {
+            if (!tmp[12].trim().isEmpty()) {
                 trafficRestriction = tmp[12].trim().charAt(0);
             }
             Integer flightNumber = Integer.parseInt(tmp[14].trim());
-			out.collect(new Flight(originAirport, originTerminal, "", "", "", "", 0.0, 0.0, departure.getTime(),
-                                   destinationAirport, destinationTerminal, "", "", "", "", 0.0, 0.0, arrival.getTime(),
-                                   airline, flightNumber, aircraft, -1, codeshareInfo, trafficRestriction));
-		}
-	}
-	
-	@SuppressWarnings("serial")
-	public static class AirportCoordinateExtractor implements 
-	FlatMapFunction<String, Tuple7<String, String, String, String, String, Double, Double>> {
-		
-		String[] tmp = null;
-		String from = null;
-		String until = null;
-		
-		@Override
-		public void flatMap(String value, Collector<Tuple7<String, String, String, String, String, Double, Double>> out) throws Exception {
-			tmp = value.split("\\^");
-            if(tmp[0].trim().startsWith("#")) {
+            out.collect(new Flight(originAirport, originTerminal, "", "", "", "", 0.0, 0.0, departure.getTime(),
+                    destinationAirport, destinationTerminal, "", "", "", "", 0.0, 0.0, arrival.getTime(),
+                    airline, flightNumber, aircraft, -1, codeshareInfo, trafficRestriction));
+        }
+    }
+
+    @SuppressWarnings("serial")
+    public static class AirportCoordinateExtractor implements
+            FlatMapFunction<String, Tuple7<String, String, String, String, String, Double, Double>> {
+
+        String[] tmp = null;
+        String from = null;
+        String until = null;
+
+        @Override
+        public void flatMap(String value, Collector<Tuple7<String, String, String, String, String, Double, Double>> out) throws Exception {
+            tmp = value.split("\\^");
+            if (tmp[0].trim().startsWith("#")) {
                 // header
                 return;
             }
-			if(!tmp[41].trim().equals("A")) {
-				// not an airport
-				return;
-			}
-			from = tmp[13].trim();
-			until = tmp[14].trim();
-			if(!until.equals("")) {
-				// expired
-				return;
-			}
-			Double latitude;
-			Double longitude;
-			try {
-				latitude = new Double(Double.parseDouble(tmp[8].trim()));
-				longitude = new Double(Double.parseDouble(tmp[9].trim()));
-			} catch(Exception e) {
-				// invalid coordinates
-				return;
-			}
+            if (!tmp[41].trim().equals("A")) {
+                // not an airport
+                return;
+            }
+            from = tmp[13].trim();
+            until = tmp[14].trim();
+            if (!until.equals("")) {
+                // expired
+                return;
+            }
+            Double latitude;
+            Double longitude;
+            try {
+                latitude = new Double(Double.parseDouble(tmp[8].trim()));
+                longitude = new Double(Double.parseDouble(tmp[9].trim()));
+            } catch (Exception e) {
+                // invalid coordinates
+                return;
+            }
             String iataCode = tmp[0].trim();
             String cityCode = tmp[36].trim();
             String countryCode = tmp[16].trim();
             String stateCode = tmp[40].trim();
-			out.collect(new Tuple7<String, String, String, String, String, Double, Double>(iataCode, cityCode, stateCode, countryCode, "", latitude, longitude));
-		}
-	}
+            out.collect(new Tuple7<String, String, String, String, String, Double, Double>(iataCode, cityCode, stateCode, countryCode, "", latitude, longitude));
+        }
+    }
 
     public static class RegionExtractor implements MapFunction<String, Tuple2<String, String>> {
 
@@ -222,10 +233,10 @@ public class FlightConnectionJoiner {
             tmp = s.split("\\^");
             String countryCode = tmp[0].trim().replace("\"", "");
             String regionCode = "";
-            if(tmp[8].trim().equals("1")) {
+            if (tmp[8].trim().equals("1")) {
                 regionCode = "SCH";
             } else {
-                regionCode = tmp[6].trim().replace("\"","");
+                regionCode = tmp[6].trim().replace("\"", "");
             }
             return new Tuple2<String, String>(countryCode, regionCode);
         }
@@ -241,14 +252,14 @@ public class FlightConnectionJoiner {
             return first;
         }
     }
-	
-	@SuppressWarnings("serial")
-	public static class OriginCoordinateJoiner implements JoinFunction<Flight, Tuple7<String, String, String, String, String, Double, Double>, Flight> {
 
-		@Override
-		public Flight join(Flight first, Tuple7<String, String, String, String, String, Double, Double> second)
-				throws Exception {
-            if(!second.f1.isEmpty()) {
+    @SuppressWarnings("serial")
+    public static class OriginCoordinateJoiner implements JoinFunction<Flight, Tuple7<String, String, String, String, String, Double, Double>, Flight> {
+
+        @Override
+        public Flight join(Flight first, Tuple7<String, String, String, String, String, Double, Double> second)
+                throws Exception {
+            if (!second.f1.isEmpty()) {
                 first.setOriginCity(second.f1);
             } else {
                 // use airport code as city code if city code unavailable
@@ -260,7 +271,7 @@ public class FlightConnectionJoiner {
             first.setOriginLatitude(second.f5);
             first.setOriginLongitude(second.f6);
 
-            if(!second.f1.isEmpty()) {
+            if (!second.f1.isEmpty()) {
                 first.setLastCity(second.f1);
             } else {
                 // use airport code as city code if city code unavailable
@@ -272,18 +283,18 @@ public class FlightConnectionJoiner {
             first.setLastLatitude(second.f5);
             first.setLastLongitude(second.f6);
 
-			return first;
-		}
-		
-	}
-	
-	@SuppressWarnings("serial")
-	public static class DestinationCoordinateJoiner implements JoinFunction<Flight, Tuple7<String, String, String, String, String, Double, Double>, Flight> {
+            return first;
+        }
 
-		@Override
-		public Flight join(Flight first, Tuple7<String, String, String, String, String, Double, Double> second)
-				throws Exception {
-            if(!second.f1.isEmpty()) {
+    }
+
+    @SuppressWarnings("serial")
+    public static class DestinationCoordinateJoiner implements JoinFunction<Flight, Tuple7<String, String, String, String, String, Double, Double>, Flight> {
+
+        @Override
+        public Flight join(Flight first, Tuple7<String, String, String, String, String, Double, Double> second)
+                throws Exception {
+            if (!second.f1.isEmpty()) {
                 first.setDestinationCity(second.f1);
             } else {
                 // use airport code as city code if city code unavailable
@@ -294,10 +305,10 @@ public class FlightConnectionJoiner {
             first.setDestinationRegion(second.f4);
             first.setDestinationLatitude(second.f5);
             first.setDestinationLongitude(second.f6);
-			return first;
+            return first;
         }
-		
-	}
+
+    }
 
     public static class MultiLegJoiner implements FlatJoinFunction<Flight, Flight, Flight> {
 
@@ -307,33 +318,33 @@ public class FlightConnectionJoiner {
         @Override
         public void join(Flight in1, Flight in2, Collector<Flight> out) throws Exception {
             // sanity checks
-            if(!in1.getDestinationCity().equals(in2.getOriginCity())) {
+            if (!in1.getDestinationCity().equals(in2.getOriginCity())) {
                 throw new Exception("Hub city mismatch: " + in1.toString() + " / " + in2.toString());
             }
-            if(!in1.getAirline().equals(in2.getAirline()) && in1.getFlightNumber().equals(in2.getFlightNumber())) {
+            if (!in1.getAirline().equals(in2.getAirline()) && in1.getFlightNumber().equals(in2.getFlightNumber())) {
                 throw new Exception("Flight mismatch: " + in1.toString() + " / " + in2.toString());
             }
-            if(exceptionsIn.indexOf(in1.getTrafficRestriction()) >= 0) {
+            if (exceptionsIn.indexOf(in1.getTrafficRestriction()) >= 0) {
                 return;
             }
-            if(((exceptions.indexOf(in1.getTrafficRestriction()) >= 0) && in2.getTrafficRestriction().equals(EMPTY)) ||
-               ((exceptions.indexOf(in2.getTrafficRestriction()) >= 0) && in1.getTrafficRestriction().equals(EMPTY)) ) {
+            if (((exceptions.indexOf(in1.getTrafficRestriction()) >= 0) && in2.getTrafficRestriction().equals(EMPTY)) ||
+                    ((exceptions.indexOf(in2.getTrafficRestriction()) >= 0) && in1.getTrafficRestriction().equals(EMPTY))) {
                 return;
             }
             long hubTime = in2.getDepartureTimestamp() - in1.getArrivalTimestamp();
             long travelTime = in2.getArrivalTimestamp() - in1.getDepartureTimestamp();
-            if(hubTime <= 0L) {
+            if (hubTime <= 0L) {
                 // arrival before departure
                 return;
             }
-            if(hubTime < (computeMinCT()*60L*1000L)) {
+            if (hubTime < (computeMinCT() * 60L * 1000L)) {
                 return;
             }
             double ODDistance = dist(in1.getOriginLatitude(), in1.getOriginLongitude(), in2.getDestinationLatitude(), in2.getDestinationLongitude());
-            if(hubTime > ((computeMaxCT(ODDistance))*60L*1000L)) {
+            if (hubTime > ((computeMaxCT(ODDistance)) * 60L * 1000L)) {
                 return;
             }
-            if(in1.getOriginAirport().equals(in2.getDestinationAirport())) {
+            if (in1.getOriginAirport().equals(in2.getDestinationAirport())) {
                 // some multi-leg flights are circular
                 return;
             }
@@ -364,8 +375,8 @@ public class FlightConnectionJoiner {
 
             result.setAirline(in1.getAirline());
             result.setFlightNumber(in1.getFlightNumber());
-            if(!in1.getAircraftType().equals(in2.getAircraftType())) {
-                if(in1.getMaxCapacity() <= in2.getMaxCapacity()) {
+            if (!in1.getAircraftType().equals(in2.getAircraftType())) {
+                if (in1.getMaxCapacity() <= in2.getMaxCapacity()) {
                     result.setAircraftType(in1.getAircraftType());
                     result.setMaxCapacity(in1.getMaxCapacity());
                 } else {
@@ -377,28 +388,28 @@ public class FlightConnectionJoiner {
                 result.setMaxCapacity(in1.getMaxCapacity());
             }
             String codeshareInfo = "";
-            if(!in1.getCodeShareInfo().isEmpty() && !in2.getCodeShareInfo().isEmpty()) {
+            if (!in1.getCodeShareInfo().isEmpty() && !in2.getCodeShareInfo().isEmpty()) {
                 // merge codeshare info
                 String[] codeshareInfo1 = in1.getCodeShareInfo().split("/");
                 String[] codeshareInfo2 = in2.getCodeShareInfo().split("/");
                 for (int i = 0; i < codeshareInfo1.length; i++) {
                     for (int j = 0; j < codeshareInfo2.length; j++) {
                         // keep all codeshare info that allows a connection over this multi-leg segment
-                        if(codeshareInfo1[i].substring(0,2).equals(codeshareInfo2[j].substring(0,2))) {
+                        if (codeshareInfo1[i].substring(0, 2).equals(codeshareInfo2[j].substring(0, 2))) {
                             codeshareInfo += codeshareInfo1[i] + "/";
                             codeshareInfo += codeshareInfo2[j] + "/";
                         }
                     }
                 }
             }
-            if(!codeshareInfo.isEmpty()) {
-                codeshareInfo = codeshareInfo.substring(0,codeshareInfo.lastIndexOf('/'));
+            if (!codeshareInfo.isEmpty()) {
+                codeshareInfo = codeshareInfo.substring(0, codeshareInfo.lastIndexOf('/'));
             }
             result.setCodeShareInfo(codeshareInfo);
 
-            if(in1.getTrafficRestriction().equals('I') && in2.getTrafficRestriction().equals('I')) {
+            if (in1.getTrafficRestriction().equals('I') && in2.getTrafficRestriction().equals('I')) {
                 result.setTrafficRestriction(EMPTY);
-            } else if(in1.getTrafficRestriction().equals('A') && in2.getTrafficRestriction().equals('A')) {
+            } else if (in1.getTrafficRestriction().equals('A') && in2.getTrafficRestriction().equals('A')) {
                 result.setTrafficRestriction(EMPTY);
             } else {
                 result.setTrafficRestriction(in2.getTrafficRestriction());
@@ -418,67 +429,67 @@ public class FlightConnectionJoiner {
             out.collect(result);
         }
     }
-	
-	@SuppressWarnings("serial")
-	public static class FilteringConnectionJoiner implements FlatJoinFunction<Flight, Flight, Tuple2<Flight, Flight>> {
+
+    @SuppressWarnings("serial")
+    public static class FilteringConnectionJoiner implements FlatJoinFunction<Flight, Flight, Tuple2<Flight, Flight>> {
 
         private final String exceptionsGeneral = "ABHIMTDEG";
         private final String exceptionsInternational = "NOQW";
         private final String exceptionsDomestic = "C";
 
-		@Override
-		public void join(Flight in1, Flight in2, Collector<Tuple2<Flight, Flight>> out)
-				throws Exception {
-			// sanity check
-			if(!in1.getDestinationCity().equals(in2.getOriginCity())) {
-				throw new Exception("Hub city mismatch: " + in1.toString() + " / " + in2.toString());
-			}
-			long hubTime = in2.getDepartureTimestamp() - in1.getArrivalTimestamp();
+        @Override
+        public void join(Flight in1, Flight in2, Collector<Tuple2<Flight, Flight>> out)
+                throws Exception {
+            // sanity check
+            if (!in1.getDestinationCity().equals(in2.getOriginCity())) {
+                throw new Exception("Hub city mismatch: " + in1.toString() + " / " + in2.toString());
+            }
+            long hubTime = in2.getDepartureTimestamp() - in1.getArrivalTimestamp();
             long travelTime = in2.getArrivalTimestamp() - in1.getDepartureTimestamp();
-			if(hubTime <= 0L) {
-				// arrival before departure
-				return;
-			}
-			if(hubTime < (computeMinCT()*60L*1000L)) {
-				return;
-			}
+            if (hubTime <= 0L) {
+                // arrival before departure
+                return;
+            }
+            if (hubTime < (computeMinCT() * 60L * 1000L)) {
+                return;
+            }
             double ODDistance = dist(in1.getOriginLatitude(), in1.getOriginLongitude(), in2.getDestinationLatitude(), in2.getDestinationLongitude());
-			if(hubTime > ((computeMaxCT(ODDistance))*60L*1000L)) {
-				return;
-			}
-            if(in1.getOriginAirport().equals(in2.getDestinationAirport())) {
+            if (hubTime > ((computeMaxCT(ODDistance)) * 60L * 1000L)) {
+                return;
+            }
+            if (in1.getOriginAirport().equals(in2.getDestinationAirport())) {
                 // some multi-leg flights are circular
                 return;
             }
-            if(in1.getAirline().equals(in2.getAirline()) && in1.getFlightNumber().equals(in2.getFlightNumber())) {
+            if (in1.getAirline().equals(in2.getAirline()) && in1.getFlightNumber().equals(in2.getFlightNumber())) {
                 // multi-leg flight connections have already been built
                 return;
             }
             // check traffic restrictions
-            if((exceptionsGeneral.indexOf(in1.getTrafficRestriction()) >= 0) ||
-               (exceptionsGeneral.indexOf(in2.getTrafficRestriction()) >= 0)) {
+            if ((exceptionsGeneral.indexOf(in1.getTrafficRestriction()) >= 0) ||
+                    (exceptionsGeneral.indexOf(in2.getTrafficRestriction()) >= 0)) {
                 return;
-            } else if(!isDomestic(in2) && exceptionsDomestic.indexOf(in1.getTrafficRestriction()) >= 0) {
+            } else if (!isDomestic(in2) && exceptionsDomestic.indexOf(in1.getTrafficRestriction()) >= 0) {
                 return;
-            } else if(!isDomestic(in1) && exceptionsDomestic.indexOf(in2.getTrafficRestriction()) >= 0) {
+            } else if (!isDomestic(in1) && exceptionsDomestic.indexOf(in2.getTrafficRestriction()) >= 0) {
                 return;
-            } else if(isDomestic(in2) && exceptionsInternational.indexOf(in1.getTrafficRestriction()) >= 0) {
+            } else if (isDomestic(in2) && exceptionsInternational.indexOf(in1.getTrafficRestriction()) >= 0) {
                 return;
-            } else if(isDomestic(in1) && exceptionsInternational.indexOf(in2.getTrafficRestriction()) >= 0) {
+            } else if (isDomestic(in1) && exceptionsInternational.indexOf(in2.getTrafficRestriction()) >= 0) {
                 return;
             }
-            if(isODDomestic(in1, in2)) {
-                if(!isDomestic(in1)) {
-                    if(hubTime > 240L*60L*1000L ||
-                       !geoDetourAcceptable(in1.getOriginLatitude(), in1.getOriginLongitude(),
-                            in1.getDestinationLatitude(), in1.getDestinationLongitude(),
-                            in2.getDestinationLatitude(), in2.getDestinationLongitude())) {
+            if (isODDomestic(in1, in2)) {
+                if (!isDomestic(in1)) {
+                    if (hubTime > 240L * 60L * 1000L ||
+                            !geoDetourAcceptable(in1.getOriginLatitude(), in1.getOriginLongitude(),
+                                    in1.getDestinationLatitude(), in1.getDestinationLongitude(),
+                                    in2.getDestinationLatitude(), in2.getDestinationLongitude())) {
                         // for domestic connections with the hub in another country the MaxCT is 240 min
                         // and geoDetour applies
                         return;
                     }
                 } else {
-                    if(travelTime > (travelTimeAt100kphInMinutes(ODDistance)*60L*1000L)) {
+                    if (travelTime > (travelTimeAt100kphInMinutes(ODDistance) * 60L * 1000L)) {
                         // if on a domestic flight we are faster than 100 km/h in a straight line between
                         // origin and destination the connection is built even if geoDetour is exceeded
                         // this is to preserve connection via domestic hubs like TLS-ORY-NCE
@@ -495,50 +506,50 @@ public class FlightConnectionJoiner {
             if (in1.getAirline().equals(in2.getAirline())) {
                 // same airline
                 out.collect(new Tuple2<Flight, Flight>(in1, in2));
-            } else if(in1.getCodeShareInfo().isEmpty() && in2.getCodeShareInfo().isEmpty()) {
+            } else if (in1.getCodeShareInfo().isEmpty() && in2.getCodeShareInfo().isEmpty()) {
                 // not the same airline and no codeshare information
                 return;
             } else {
                 // check if a connection can be made via codeshares
                 String[] codeshareAirlines1 = null;
-                if(!in1.getCodeShareInfo().isEmpty()) {
+                if (!in1.getCodeShareInfo().isEmpty()) {
                     String[] codeshareInfo1 = in1.getCodeShareInfo().split("/");
-                    codeshareAirlines1 = new String[codeshareInfo1.length+1];
+                    codeshareAirlines1 = new String[codeshareInfo1.length + 1];
                     for (int i = 0; i < codeshareInfo1.length; i++) {
-                        codeshareAirlines1[i] = codeshareInfo1[i].substring(0,2);
+                        codeshareAirlines1[i] = codeshareInfo1[i].substring(0, 2);
                     }
-                    codeshareAirlines1[codeshareAirlines1.length-1] = in1.getAirline();
+                    codeshareAirlines1[codeshareAirlines1.length - 1] = in1.getAirline();
                 } else {
                     codeshareAirlines1 = new String[]{in1.getAirline()};
                 }
                 String[] codeshareAirlines2 = null;
-                if(!in2.getCodeShareInfo().isEmpty()) {
+                if (!in2.getCodeShareInfo().isEmpty()) {
                     String[] codeshareInfo2 = in2.getCodeShareInfo().split("/");
-                    codeshareAirlines2 = new String[codeshareInfo2.length+1];
+                    codeshareAirlines2 = new String[codeshareInfo2.length + 1];
                     for (int i = 0; i < codeshareInfo2.length; i++) {
-                        codeshareAirlines2[i] = codeshareInfo2[i].substring(0,2);
+                        codeshareAirlines2[i] = codeshareInfo2[i].substring(0, 2);
                     }
-                    codeshareAirlines2[codeshareAirlines2.length-1] = in2.getAirline();
+                    codeshareAirlines2[codeshareAirlines2.length - 1] = in2.getAirline();
                 } else {
                     codeshareAirlines2 = new String[]{in2.getAirline()};
                 }
-                for(int i = 0; i < codeshareAirlines1.length; i++) {
-                    for(int j = 0; j < codeshareAirlines2.length; j++) {
-                        if(codeshareAirlines1[i].equals(codeshareAirlines2[j])) {
+                for (int i = 0; i < codeshareAirlines1.length; i++) {
+                    for (int j = 0; j < codeshareAirlines2.length; j++) {
+                        if (codeshareAirlines1[i].equals(codeshareAirlines2[j])) {
                             out.collect(new Tuple2<Flight, Flight>(in1, in2));
                             return;
                         }
                     }
                 }
             }
-		}
+        }
 
-	}
+    }
 
     public static class ThreeLegJoiner implements FlatJoinFunction<Tuple2<Flight, Flight>, Tuple2<Flight, Flight>, Tuple3<Flight, Flight, Flight>> {
 
         @Override
-        public void join(Tuple2<Flight, Flight> in1 ,Tuple2<Flight, Flight> in2, Collector<Tuple3<Flight, Flight, Flight>> out) throws Exception {
+        public void join(Tuple2<Flight, Flight> in1, Tuple2<Flight, Flight> in2, Collector<Tuple3<Flight, Flight, Flight>> out) throws Exception {
 
             long hub1Time = in1.f1.getDepartureTimestamp() - in1.f0.getArrivalTimestamp();
             long hub2Time = in2.f1.getDepartureTimestamp() - in2.f0.getArrivalTimestamp();
@@ -557,9 +568,9 @@ public class FlightConnectionJoiner {
             if (!geoDetourAcceptable(in1.f0.getOriginLatitude(), in1.f0.getOriginLongitude(),
                     in1.f0.getDestinationLatitude(), in1.f0.getDestinationLongitude(),
                     in1.f1.getDestinationLatitude(), in1.f1.getDestinationLongitude()) ||
-                !geoDetourAcceptable(in2.f0.getOriginLatitude(), in2.f0.getOriginLongitude(),
-                        in2.f0.getDestinationLatitude(), in2.f0.getDestinationLongitude(),
-                        in2.f1.getDestinationLatitude(), in2.f1.getDestinationLongitude())) {
+                    !geoDetourAcceptable(in2.f0.getOriginLatitude(), in2.f0.getOriginLongitude(),
+                            in2.f0.getDestinationLatitude(), in2.f0.getDestinationLongitude(),
+                            in2.f1.getDestinationLatitude(), in2.f1.getDestinationLongitude())) {
                 // if a two-leg connection exceeds the geoDetour it is unreasonable to build a
                 // three-leg connection from it even if the two-leg connection makes sense
                 return;
@@ -730,7 +741,7 @@ public class FlightConnectionJoiner {
                 stat = entry.getStat();
                 arr = entry.getArrival();
                 dep = entry.getDeparture();
-                if(dep.isEmpty()) {
+                if (dep.isEmpty()) {
                     if (stat.equals("DD")) {
                         DDList.add(entry);
                     } else if (stat.equals("DI")) {
@@ -742,7 +753,7 @@ public class FlightConnectionJoiner {
                     } else {
                         throw new Exception("Unknown stat: " + entry.toString());
                     }
-                } else if(!arr.equals(dep)) {
+                } else if (!arr.equals(dep)) {
                     if (stat.equals("DD")) {
                         DDWithAPChangeList.add(entry);
                     } else if (stat.equals("DI")) {
@@ -765,9 +776,9 @@ public class FlightConnectionJoiner {
             Collections.sort(IDWithAPChangeList, new ScoreComparator());
             Collections.sort(IIWithAPChangeList, new ScoreComparator());
             //if(LOG.isInfoEnabled()) {
-             //   end = System.currentTimeMillis();
-             //   ruleLoadingTimes.add(end-start);
-             //   start = System.currentTimeMillis();
+            //   end = System.currentTimeMillis();
+            //   ruleLoadingTimes.add(end-start);
+            //   start = System.currentTimeMillis();
             //}
             ArrayList<MCTEntry> connStatList = null;
             long defaultMCT = 0L;
@@ -815,17 +826,17 @@ public class FlightConnectionJoiner {
                 int tmpResult = 0;
                 MCTEntry bestRule = null;
                 for (MCTEntry e : connStatList) {
-                    if(match(conn, e)) {
+                    if (match(conn, e)) {
                         bestRule = e;
                         break; // first hit is best rule since the list is sorted by score
                     }
                 }
-                if(bestRule != null) {
+                if (bestRule != null) {
                     MCT = bestRule.getMCT();
                 } else {
                     MCT = defaultMCT;
                 }
-                if(checkWithMCT(conn, MCT)) {
+                if (checkWithMCT(conn, MCT)) {
                     out.collect(conn);
                 }
             }
@@ -836,12 +847,12 @@ public class FlightConnectionJoiner {
         }
 
         private static boolean checkWithMCT(Tuple2<Flight, Flight> conn, long MCT) {
-            if(MCT >= 999L) {
+            if (MCT >= 999L) {
                 return false;
             }
-            long MinCT = MCT*60L*1000L;
+            long MinCT = MCT * 60L * 1000L;
             long hubTime = conn.f1.getDepartureTimestamp() - conn.f0.getArrivalTimestamp();
-            if(hubTime < MinCT) {
+            if (hubTime < MinCT) {
                 return false;
             } else {
                 return true;
@@ -853,7 +864,7 @@ public class FlightConnectionJoiner {
             @Override
             public int compare(MCTEntry mctEntry, MCTEntry mctEntry2) {
                 // descending order
-                return scoreRule(mctEntry2)-scoreRule(mctEntry);
+                return scoreRule(mctEntry2) - scoreRule(mctEntry);
             }
 
             @Override
@@ -865,49 +876,49 @@ public class FlightConnectionJoiner {
 
         public static int scoreRule(MCTEntry rule) {
             int result = 0;
-            if(rule.getStat().isEmpty())
+            if (rule.getStat().isEmpty())
                 return 0;
-            if(!rule.getDeparture().isEmpty())
+            if (!rule.getDeparture().isEmpty())
                 result += 1 << 0;
-            if(!rule.getArrival().isEmpty())
+            if (!rule.getArrival().isEmpty())
                 result += 1 << 1;
-            if(!rule.getDepTerminal().isEmpty())
+            if (!rule.getDepTerminal().isEmpty())
                 result += 1 << 2;
-            if(!rule.getArrTerminal().isEmpty())
+            if (!rule.getArrTerminal().isEmpty())
                 result += 1 << 3;
-            if(!rule.getNextRegion().isEmpty())
+            if (!rule.getNextRegion().isEmpty())
                 result += 1 << 4;
-            if(!rule.getPrevRegion().isEmpty())
+            if (!rule.getPrevRegion().isEmpty())
                 result += 1 << 5;
-            if(!rule.getNextCountry().isEmpty())
+            if (!rule.getNextCountry().isEmpty())
                 result += 1 << 6;
-            if(!rule.getPrevCountry().isEmpty())
+            if (!rule.getPrevCountry().isEmpty())
                 result += 1 << 7;
-            if(!rule.getNextState().isEmpty())
+            if (!rule.getNextState().isEmpty())
                 result += 1 << 8;
-            if(!rule.getPrevState().isEmpty())
+            if (!rule.getPrevState().isEmpty())
                 result += 1 << 9;
-            if(!rule.getNextCity().isEmpty())
+            if (!rule.getNextCity().isEmpty())
                 result += 1 << 10;
-            if(!rule.getPrevCity().isEmpty())
+            if (!rule.getPrevCity().isEmpty())
                 result += 1 << 11;
-            if(!rule.getNextAirport().isEmpty())
+            if (!rule.getNextAirport().isEmpty())
                 result += 1 << 12;
-            if(!rule.getPrevAirport().isEmpty())
+            if (!rule.getPrevAirport().isEmpty())
                 result += 1 << 13;
-            if(!rule.getDepAircraft().isEmpty())
+            if (!rule.getDepAircraft().isEmpty())
                 result += 1 << 14;
-            if(!rule.getArrAircraft().isEmpty())
+            if (!rule.getArrAircraft().isEmpty())
                 result += 1 << 15;
-            if(!rule.getDepCarrier().isEmpty()) {
+            if (!rule.getDepCarrier().isEmpty()) {
                 result += 1 << 16;
-                if(rule.getOutFlightNumber().intValue() != 0) {
+                if (rule.getOutFlightNumber().intValue() != 0) {
                     result += 1 << 18;
                 }
             }
-            if(!rule.getArrCarrier().isEmpty()) {
+            if (!rule.getArrCarrier().isEmpty()) {
                 result += 1 << 17;
-                if(rule.getInFlightNumber().intValue() != 0) {
+                if (rule.getInFlightNumber().intValue() != 0) {
                     result += 1 << 19;
                 }
             }
@@ -915,113 +926,113 @@ public class FlightConnectionJoiner {
         }
 
         private static boolean match(Tuple2<Flight, Flight> conn, MCTEntry rule) {
-            if(!rule.getArrival().isEmpty()) {
-                if(!conn.f0.getDestinationAirport().equals(rule.getArrival())) {
-                   return false;
-                }
-            }
-            if(!rule.getDeparture().isEmpty()) {
-                if(!conn.f1.getLastAirport().equals(rule.getDeparture())) {
+            if (!rule.getArrival().isEmpty()) {
+                if (!conn.f0.getDestinationAirport().equals(rule.getArrival())) {
                     return false;
                 }
             }
-            if(!rule.getArrCarrier().isEmpty()) {
-                if(!conn.f0.getAirline().equals(rule.getArrCarrier())) {
+            if (!rule.getDeparture().isEmpty()) {
+                if (!conn.f1.getLastAirport().equals(rule.getDeparture())) {
+                    return false;
+                }
+            }
+            if (!rule.getArrCarrier().isEmpty()) {
+                if (!conn.f0.getAirline().equals(rule.getArrCarrier())) {
                     return false;
                 } else {
-                    if(rule.getInFlightNumber().intValue() != 0) {
-                        if(!(conn.f0.getFlightNumber() >= rule.getInFlightNumber() &&
-                             conn.f0.getFlightNumber() <= rule.getInFlightEOR())) {
+                    if (rule.getInFlightNumber().intValue() != 0) {
+                        if (!(conn.f0.getFlightNumber() >= rule.getInFlightNumber() &&
+                                conn.f0.getFlightNumber() <= rule.getInFlightEOR())) {
                             return false;
                         }
                     }
                 }
             }
-            if(!rule.getDepCarrier().isEmpty()) {
-                if(!conn.f1.getAirline().equals(rule.getDepCarrier())) {
+            if (!rule.getDepCarrier().isEmpty()) {
+                if (!conn.f1.getAirline().equals(rule.getDepCarrier())) {
                     return false;
                 } else {
-                    if(rule.getOutFlightNumber().intValue() != 0) {
-                        if(!(conn.f1.getFlightNumber() >= rule.getOutFlightNumber() &&
-                             conn.f1.getFlightNumber() <= rule.getOutFlightEOR())) {
+                    if (rule.getOutFlightNumber().intValue() != 0) {
+                        if (!(conn.f1.getFlightNumber() >= rule.getOutFlightNumber() &&
+                                conn.f1.getFlightNumber() <= rule.getOutFlightEOR())) {
                             return false;
                         }
                     }
                 }
             }
-            if(!rule.getArrAircraft().isEmpty()) {
-                if(!conn.f0.getAircraftType().equals(rule.getArrAircraft())) {
+            if (!rule.getArrAircraft().isEmpty()) {
+                if (!conn.f0.getAircraftType().equals(rule.getArrAircraft())) {
                     return false;
                 }
             }
-            if(!rule.getDepAircraft().isEmpty()) {
-                if(!conn.f1.getAircraftType().equals(rule.getDepAircraft())) {
+            if (!rule.getDepAircraft().isEmpty()) {
+                if (!conn.f1.getAircraftType().equals(rule.getDepAircraft())) {
                     return false;
                 }
             }
-            if(!rule.getArrTerminal().isEmpty()) {
-                if(!conn.f0.getDestinationTerminal().equals(rule.getArrTerminal())) {
+            if (!rule.getArrTerminal().isEmpty()) {
+                if (!conn.f0.getDestinationTerminal().equals(rule.getArrTerminal())) {
                     return false;
                 }
             }
-            if(!rule.getDepTerminal().isEmpty()) {
-                if(!conn.f1.getLastTerminal().equals(rule.getDepTerminal())) {
+            if (!rule.getDepTerminal().isEmpty()) {
+                if (!conn.f1.getLastTerminal().equals(rule.getDepTerminal())) {
                     return false;
                 }
             }
-            if(!rule.getPrevCountry().isEmpty()) {
-                if(!conn.f0.getLastCountry().equals(rule.getPrevCountry())) {
+            if (!rule.getPrevCountry().isEmpty()) {
+                if (!conn.f0.getLastCountry().equals(rule.getPrevCountry())) {
                     return false;
                 }
             }
-            if(!rule.getPrevCity().isEmpty()) {
-                if(!conn.f0.getLastCity().equals(rule.getPrevCity())) {
+            if (!rule.getPrevCity().isEmpty()) {
+                if (!conn.f0.getLastCity().equals(rule.getPrevCity())) {
                     return false;
                 }
             }
-            if(!rule.getPrevAirport().isEmpty()) {
-                if(!conn.f0.getLastAirport().equals(rule.getPrevAirport())) {
+            if (!rule.getPrevAirport().isEmpty()) {
+                if (!conn.f0.getLastAirport().equals(rule.getPrevAirport())) {
                     return false;
                 }
             }
-            if(!rule.getNextCountry().isEmpty()) {
-                if(!conn.f1.getDestinationCountry().equals(rule.getNextCountry())) {
+            if (!rule.getNextCountry().isEmpty()) {
+                if (!conn.f1.getDestinationCountry().equals(rule.getNextCountry())) {
                     return false;
                 }
             }
-            if(!rule.getNextCity().isEmpty()) {
-                if(!conn.f1.getDestinationCity().equals(rule.getNextCity())) {
+            if (!rule.getNextCity().isEmpty()) {
+                if (!conn.f1.getDestinationCity().equals(rule.getNextCity())) {
                     return false;
                 }
             }
-            if(!rule.getNextAirport().isEmpty()) {
-                if(!conn.f1.getDestinationAirport().equals(rule.getNextAirport())) {
+            if (!rule.getNextAirport().isEmpty()) {
+                if (!conn.f1.getDestinationAirport().equals(rule.getNextAirport())) {
                     return false;
                 }
             }
-            if(!rule.getPrevState().isEmpty()) {
-                if(!conn.f0.getLastState().equals(rule.getPrevState())) {
+            if (!rule.getPrevState().isEmpty()) {
+                if (!conn.f0.getLastState().equals(rule.getPrevState())) {
                     return false;
                 }
             }
-            if(!rule.getNextState().isEmpty()) {
-                if(!conn.f1.getDestinationState().equals(rule.getNextState())) {
+            if (!rule.getNextState().isEmpty()) {
+                if (!conn.f1.getDestinationState().equals(rule.getNextState())) {
                     return false;
                 }
             }
-            if(!rule.getPrevRegion().isEmpty()) {
+            if (!rule.getPrevRegion().isEmpty()) {
                 // SCH is a real subset of EUR
-                if(!rule.getPrevRegion().equals("EUR") || !rule.getPrevRegion().equals("SCH")) {
-                    if(!conn.f0.getLastRegion().equals(rule.getPrevRegion())) {
+                if (!rule.getPrevRegion().equals("EUR") || !rule.getPrevRegion().equals("SCH")) {
+                    if (!conn.f0.getLastRegion().equals(rule.getPrevRegion())) {
                         return false;
                     }
                 } else {
-                    if(!conn.f0.getLastRegion().equals("SCH") || !conn.f0.getLastRegion().equals("EUR")) {
+                    if (!conn.f0.getLastRegion().equals("SCH") || !conn.f0.getLastRegion().equals("EUR")) {
                         return false;
                     }
                 }
             }
-            if(!rule.getNextRegion().isEmpty()) {
+            if (!rule.getNextRegion().isEmpty()) {
                 // SCH is a real subset of EUR
                 if (!rule.getNextRegion().equals("EUR") || !rule.getNextRegion().equals("SCH")) {
                     if (!conn.f1.getDestinationRegion().equals(rule.getNextRegion())) {
@@ -1044,7 +1055,7 @@ public class FlightConnectionJoiner {
 
         @Override
         public boolean filter(Flight flight) throws Exception {
-            if(flight.getDepartureTimestamp() < START || flight.getDepartureTimestamp() > END) {
+            if (flight.getDepartureTimestamp() < START || flight.getDepartureTimestamp() > END) {
                 return false;
             } else {
                 return true;
@@ -1061,7 +1072,7 @@ public class FlightConnectionJoiner {
 
         @Override
         public boolean filter(Flight value) throws Exception {
-            if(exceptions.indexOf(value.getTrafficRestriction()) >= 0) {
+            if (exceptions.indexOf(value.getTrafficRestriction()) >= 0) {
                 return false;
             } else {
                 return true;
@@ -1077,15 +1088,15 @@ public class FlightConnectionJoiner {
 
         @Override
         public boolean filter(Tuple2<Flight, Flight> value) throws Exception {
-            if(exceptionsGeneral.indexOf(value.f0.getTrafficRestriction()) >= 0) {
+            if (exceptionsGeneral.indexOf(value.f0.getTrafficRestriction()) >= 0) {
                 return false;
-            } else if(!isDomestic(value.f1) && exceptionsDomestic.indexOf(value.f0.getTrafficRestriction()) >= 0) {
+            } else if (!isDomestic(value.f1) && exceptionsDomestic.indexOf(value.f0.getTrafficRestriction()) >= 0) {
                 return false;
-            } else if(!isDomestic(value.f0) && exceptionsDomestic.indexOf(value.f1.getTrafficRestriction()) >= 0) {
+            } else if (!isDomestic(value.f0) && exceptionsDomestic.indexOf(value.f1.getTrafficRestriction()) >= 0) {
                 return false;
-            } else if(isDomestic(value.f1) && exceptionsInternational.indexOf(value.f0.getTrafficRestriction()) >= 0) {
+            } else if (isDomestic(value.f1) && exceptionsInternational.indexOf(value.f0.getTrafficRestriction()) >= 0) {
                 return false;
-            } else if(isDomestic(value.f0) && exceptionsInternational.indexOf(value.f1.getTrafficRestriction()) >= 0) {
+            } else if (isDomestic(value.f0) && exceptionsInternational.indexOf(value.f1.getTrafficRestriction()) >= 0) {
                 return false;
             } else {
                 return true;
@@ -1109,7 +1120,7 @@ public class FlightConnectionJoiner {
 
         @Override
         public boolean filter(Flight value) throws Exception {
-            if(value.getDepartureTimestamp() < WEEK_START || value.getDepartureTimestamp() > WEEK_END) {
+            if (value.getDepartureTimestamp() < WEEK_START || value.getDepartureTimestamp() > WEEK_END) {
                 return false;
             } else {
                 return !value.getOriginCountry().equals(value.getDestinationCountry());
@@ -1121,10 +1132,12 @@ public class FlightConnectionJoiner {
 
         @Override
         public boolean filter(Tuple2<Flight, Flight> value) throws Exception {
-            if(value.f0.getDepartureTimestamp() < WEEK_START || value.f0.getDepartureTimestamp() > WEEK_END) {
+            if (value.f0.getDepartureTimestamp() < WEEK_START || value.f0.getDepartureTimestamp() > WEEK_END &&
+                    value.f1.getDepartureTimestamp() < WEEK_START || value.f1.getDepartureTimestamp() > WEEK_END) {
                 return false;
             } else {
-                return !value.f0.getOriginCountry().equals(value.f1.getDestinationCountry());
+                return !(value.f0.getOriginCountry().equals(value.f0.getDestinationCountry()) ||
+                        value.f1.getOriginCountry().equals(value.f1.getDestinationCountry()));
             }
         }
     }
@@ -1133,10 +1146,13 @@ public class FlightConnectionJoiner {
 
         @Override
         public boolean filter(Tuple3<Flight, Flight, Flight> value) throws Exception {
-            if(value.f0.getDepartureTimestamp() < WEEK_START || value.f0.getDepartureTimestamp() > WEEK_END) {
+            if (value.f0.getDepartureTimestamp() < WEEK_START || value.f0.getDepartureTimestamp() > WEEK_END &&
+                    value.f2.getDepartureTimestamp() < WEEK_START || value.f2.getDepartureTimestamp() > WEEK_END) {
                 return false;
             } else {
-                return !value.f0.getOriginCountry().equals(value.f2.getDestinationCountry());
+                return !(value.f0.getOriginCountry().equals(value.f0.getDestinationCountry()) ||
+                        value.f1.getOriginCountry().equals(value.f1.getDestinationCountry()) ||
+                        value.f2.getOriginCountry().equals(value.f2.getDestinationCountry()));
             }
         }
     }
@@ -1149,7 +1165,7 @@ public class FlightConnectionJoiner {
             boolean first = true;
             int capacity = 0;
             for (Flight flight : flights) {
-                if(first) {
+                if (first) {
                     result.f0 = flight.getOriginCity();
                     result.f1 = flight.getDestinationCity();
                     first = false;
@@ -1169,7 +1185,7 @@ public class FlightConnectionJoiner {
             boolean first = true;
             int capacity = 0;
             for (Tuple2<Flight, Flight> connection : connections) {
-                if(first) {
+                if (first) {
                     result.f0 = connection.f0.getOriginCity();
                     result.f1 = connection.f1.getDestinationCity();
                     first = false;
@@ -1189,7 +1205,7 @@ public class FlightConnectionJoiner {
             boolean first = true;
             int capacity = 0;
             for (Tuple3<Flight, Flight, Flight> connection : connections) {
-                if(first) {
+                if (first) {
                     result.f0 = connection.f0.getOriginCity();
                     result.f1 = connection.f2.getDestinationCity();
                     first = false;
@@ -1214,25 +1230,25 @@ public class FlightConnectionJoiner {
             boolean first = true;
             int capacity = 0;
             for (Flight flight : flights) {
-                if(first) {
+                if (first) {
                     result.f0 = flight.f0;
                     result.f1 = flight.f2;
                     result.f2 = flight.getAirline();
                     first = false;
                 }
-                travelTime = (int)((flight.getArrivalTimestamp()-flight.getDepartureTimestamp())/(60L*1000L));
+                travelTime = (int) ((flight.getArrivalTimestamp() - flight.getDepartureTimestamp()) / (60L * 1000L));
                 sumTime += travelTime;
                 count++;
-                if(travelTime < minTime)
+                if (travelTime < minTime)
                     minTime = travelTime;
-                if(travelTime > maxTime)
+                if (travelTime > maxTime)
                     maxTime = travelTime;
                 capacity += flight.getMaxCapacity();
             }
             result.f3 = capacity;
             result.f5 = minTime;
             result.f6 = maxTime;
-            result.f7 = sumTime/count;
+            result.f7 = sumTime / count;
             out.collect(result);
         }
     }
@@ -1250,7 +1266,7 @@ public class FlightConnectionJoiner {
             boolean first = true;
             int capacity = 0;
             for (Tuple2<Flight, Flight> connection : connections) {
-                if(first) {
+                if (first) {
                     result.f0 = connection.f0.f0;
                     result.f1 = connection.f0.f2;
                     result.f2 = connection.f0.getAirline();
@@ -1259,19 +1275,19 @@ public class FlightConnectionJoiner {
                     result.f5 = connection.f1.getAirline();
                     first = false;
                 }
-                travelTime = (int)((connection.f1.getArrivalTimestamp()-connection.f0.getDepartureTimestamp())/(60L*1000L));
+                travelTime = (int) ((connection.f1.getArrivalTimestamp() - connection.f0.getDepartureTimestamp()) / (60L * 1000L));
                 sumTime += travelTime;
                 count++;
-                if(travelTime < minTime)
+                if (travelTime < minTime)
                     minTime = travelTime;
-                if(travelTime > maxTime)
+                if (travelTime > maxTime)
                     maxTime = travelTime;
                 capacity += getMinCap(connection);
             }
             result.f6 = capacity;
             result.f8 = minTime;
             result.f9 = maxTime;
-            result.f10 = sumTime/count;
+            result.f10 = sumTime / count;
             out.collect(result);
         }
     }
@@ -1289,7 +1305,7 @@ public class FlightConnectionJoiner {
             boolean first = true;
             int capacity = 0;
             for (Tuple3<Flight, Flight, Flight> connection : connections) {
-                if(first) {
+                if (first) {
                     result.f0 = connection.f0.f0;
                     result.f1 = connection.f0.f2;
                     result.f2 = connection.f0.getAirline();
@@ -1301,19 +1317,19 @@ public class FlightConnectionJoiner {
                     result.f8 = connection.f2.getAirline();
                     first = false;
                 }
-                travelTime = (int)((connection.f2.getArrivalTimestamp()-connection.f0.getDepartureTimestamp())/(60L*1000L));
+                travelTime = (int) ((connection.f2.getArrivalTimestamp() - connection.f0.getDepartureTimestamp()) / (60L * 1000L));
                 sumTime += travelTime;
                 count++;
-                if(travelTime < minTime)
+                if (travelTime < minTime)
                     minTime = travelTime;
-                if(travelTime > maxTime)
+                if (travelTime > maxTime)
                     maxTime = travelTime;
                 capacity += getMinCap(connection);
             }
             result.f9 = capacity;
             result.f11 = minTime;
             result.f12 = maxTime;
-            result.f13 = sumTime/count;
+            result.f13 = sumTime / count;
             out.collect(result);
         }
 
@@ -1324,7 +1340,7 @@ public class FlightConnectionJoiner {
         @Override
         public ItineraryInfo.ItineraryInfo1 join(ItineraryInfo.ItineraryInfo1 itineraryInfo1, ODCapacity odCapacity) throws Exception {
             int capacity = itineraryInfo1.f3;
-            double share = (double)capacity/(double)odCapacity.f2;
+            double share = (double) capacity / (double) odCapacity.f2;
             itineraryInfo1.f4 = share;
             return itineraryInfo1;
         }
@@ -1335,7 +1351,7 @@ public class FlightConnectionJoiner {
         @Override
         public ItineraryInfo.ItineraryInfo2 join(ItineraryInfo.ItineraryInfo2 itineraryInfo2, ODCapacity odCapacity) throws Exception {
             int capacity = itineraryInfo2.f6;
-            double share = (double)capacity/(double)odCapacity.f2;
+            double share = (double) capacity / (double) odCapacity.f2;
             itineraryInfo2.f7 = share;
             return itineraryInfo2;
         }
@@ -1346,24 +1362,24 @@ public class FlightConnectionJoiner {
         @Override
         public ItineraryInfo.ItineraryInfo3 join(ItineraryInfo.ItineraryInfo3 itineraryInfo3, ODCapacity odCapacity) throws Exception {
             int capacity = itineraryInfo3.f9;
-            double share = (double)capacity/(double)odCapacity.f2;
+            double share = (double) capacity / (double) odCapacity.f2;
             itineraryInfo3.f10 = share;
             return itineraryInfo3;
         }
     }
 
-	public static void main(String[] args) throws Exception {
+    public static void main(String[] args) throws Exception {
         long start = System.currentTimeMillis();
         LOG.info("Job started at {} milliseconds.", start);
-        if(!parseParameters(args)) {
+        if (!parseParameters(args)) {
             return;
         }
-        int phase = 0;
-        if(args.length == 1) {
+        int phase = 2;
+        if (args.length == 1) {
             phase = Integer.parseInt(args[0]);
         }
         // the program is split into two parts (building and parsing all non-stop connections, and finding multi-leg flights)
-        if(phase == 0) {
+        if (phase == 0) {
             ExecutionEnvironment env = ExecutionEnvironment.getExecutionEnvironment();
 
             // get all relevant schedule data
@@ -1394,8 +1410,10 @@ public class FlightConnectionJoiner {
             };
             */
 
-            DataSet<Flight> join1 = extracted.join(airportCoordinates, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where("f0.f0").equalTo(0).with(new OriginCoordinateJoiner());
-            DataSet<Flight> join2 = join1.join(airportCoordinates, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where("f2.f0").equalTo(0).with(new DestinationCoordinateJoiner());
+            DataSet<Flight> join1 = extracted.join(airportCoordinates, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE)
+                    .where("f0.f0").equalTo(0).with(new OriginCoordinateJoiner());
+            DataSet<Flight> join2 = join1.join(airportCoordinates, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE)
+                    .where("f2.f0").equalTo(0).with(new DestinationCoordinateJoiner());
 
             // add aircraft capacities (first default then overwrite with airline specific information if available)
             DataSet<Tuple2<String, Integer>> defaultCapacities = env.readCsvFile(defaultCapacityPath).types(String.class, Integer.class);
@@ -1420,32 +1438,46 @@ public class FlightConnectionJoiner {
             */
 
             // create multi-leg flights as non-stop flights
-            DataSet<Flight> multiLeg2a = join4.join(join4, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where("f2.f2", "f4", "f5", "f13").equalTo("f0.f2", "f4", "f5", "f12").with(new MultiLegJoiner());
-            DataSet<Flight> multiLeg2b = join4.join(join4, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where("f2.f2", "f4", "f5", "f14").equalTo("f0.f2", "f4", "f5", "f12").with(new MultiLegJoiner());
+            DataSet<Flight> multiLeg2a = join4.join(join4, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where("f2.f2", "f4", "f5", "f13")
+                    .equalTo("f0.f2", "f4", "f5", "f12").with(new MultiLegJoiner());
+            DataSet<Flight> multiLeg2b = join4.join(join4, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where("f2.f2", "f4", "f5", "f14")
+                    .equalTo("f0.f2", "f4", "f5", "f12").with(new MultiLegJoiner());
             DataSet<Flight> multiLeg2 = multiLeg2a.union(multiLeg2b);
 
-            DataSet<Flight> multiLeg3a = multiLeg2.join(join4, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where("f2.f2", "f4", "f5", "f13").equalTo("f0.f2", "f4", "f5", "f12").with(new MultiLegJoiner());
-            DataSet<Flight> multiLeg3b = multiLeg2.join(join4, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where("f2.f2", "f4", "f5", "f14").equalTo("f0.f2", "f4", "f5", "f12").with(new MultiLegJoiner());
+            DataSet<Flight> multiLeg3a = multiLeg2.join(join4, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where("f2.f2", "f4", "f5", "f13")
+                    .equalTo("f0.f2", "f4", "f5", "f12").with(new MultiLegJoiner());
+            DataSet<Flight> multiLeg3b = multiLeg2.join(join4, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where("f2.f2", "f4", "f5", "f14")
+                    .equalTo("f0.f2", "f4", "f5", "f12").with(new MultiLegJoiner());
             DataSet<Flight> multiLeg3 = multiLeg3a.union(multiLeg3b);
 
-            DataSet<Flight> multiLeg4a = multiLeg2.join(multiLeg2, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where("f2.f2", "f4", "f5", "f13").equalTo("f0.f2", "f4", "f5", "f12").with(new MultiLegJoiner());
-            DataSet<Flight> multiLeg4b = multiLeg2.join(multiLeg2, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where("f2.f2", "f4", "f5", "f14").equalTo("f0.f2", "f4", "f5", "f12").with(new MultiLegJoiner());
+            DataSet<Flight> multiLeg4a = multiLeg2.join(multiLeg2, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where("f2.f2", "f4", "f5", "f13")
+                    .equalTo("f0.f2", "f4", "f5", "f12").with(new MultiLegJoiner());
+            DataSet<Flight> multiLeg4b = multiLeg2.join(multiLeg2, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where("f2.f2", "f4", "f5", "f14")
+                    .equalTo("f0.f2", "f4", "f5", "f12").with(new MultiLegJoiner());
             DataSet<Flight> multiLeg4 = multiLeg4a.union(multiLeg4b);
 
-            DataSet<Flight> multiLeg5a = multiLeg2.join(multiLeg3, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where("f2.f2", "f4", "f5", "f13").equalTo("f0.f2", "f4", "f5", "f12").with(new MultiLegJoiner());
-            DataSet<Flight> multiLeg5b = multiLeg2.join(multiLeg3, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where("f2.f2", "f4", "f5", "f14").equalTo("f0.f2", "f4", "f5", "f12").with(new MultiLegJoiner());
+            DataSet<Flight> multiLeg5a = multiLeg2.join(multiLeg3, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where("f2.f2", "f4", "f5", "f13")
+                    .equalTo("f0.f2", "f4", "f5", "f12").with(new MultiLegJoiner());
+            DataSet<Flight> multiLeg5b = multiLeg2.join(multiLeg3, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where("f2.f2", "f4", "f5", "f14")
+                    .equalTo("f0.f2", "f4", "f5", "f12").with(new MultiLegJoiner());
             DataSet<Flight> multiLeg5 = multiLeg5a.union(multiLeg5b);
 
-            DataSet<Flight> multiLeg6a = multiLeg3.join(multiLeg3, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where("f2.f2", "f4", "f5", "f13").equalTo("f0.f2", "f4", "f5", "f12").with(new MultiLegJoiner());
-            DataSet<Flight> multiLeg6b = multiLeg3.join(multiLeg3, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where("f2.f2", "f4", "f5", "f14").equalTo("f0.f2", "f4", "f5", "f12").with(new MultiLegJoiner());
+            DataSet<Flight> multiLeg6a = multiLeg3.join(multiLeg3, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where("f2.f2", "f4", "f5", "f13")
+                    .equalTo("f0.f2", "f4", "f5", "f12").with(new MultiLegJoiner());
+            DataSet<Flight> multiLeg6b = multiLeg3.join(multiLeg3, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where("f2.f2", "f4", "f5", "f14")
+                    .equalTo("f0.f2", "f4", "f5", "f12").with(new MultiLegJoiner());
             DataSet<Flight> multiLeg6 = multiLeg6a.union(multiLeg6b);
 
-            DataSet<Flight> multiLeg7a = multiLeg3.join(multiLeg4, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where("f2.f2", "f4", "f5", "f13").equalTo("f0.f2", "f4", "f5", "f12").with(new MultiLegJoiner());
-            DataSet<Flight> multiLeg7b = multiLeg3.join(multiLeg4, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where("f2.f2", "f4", "f5", "f14").equalTo("f0.f2", "f4", "f5", "f12").with(new MultiLegJoiner());
+            DataSet<Flight> multiLeg7a = multiLeg3.join(multiLeg4, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where("f2.f2", "f4", "f5", "f13")
+                    .equalTo("f0.f2", "f4", "f5", "f12").with(new MultiLegJoiner());
+            DataSet<Flight> multiLeg7b = multiLeg3.join(multiLeg4, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where("f2.f2", "f4", "f5", "f14")
+                    .equalTo("f0.f2", "f4", "f5", "f12").with(new MultiLegJoiner());
             DataSet<Flight> multiLeg7 = multiLeg7a.union(multiLeg7b);
 
-            DataSet<Flight> multiLeg8a = multiLeg4.join(multiLeg4, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where("f2.f2", "f4", "f5", "f13").equalTo("f0.f2", "f4", "f5", "f12").with(new MultiLegJoiner());
-            DataSet<Flight> multiLeg8b = multiLeg4.join(multiLeg4, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where("f2.f2", "f4", "f5", "f14").equalTo("f0.f2", "f4", "f5", "f12").with(new MultiLegJoiner());
+            DataSet<Flight> multiLeg8a = multiLeg4.join(multiLeg4, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where("f2.f2", "f4", "f5", "f13")
+                    .equalTo("f0.f2", "f4", "f5", "f12").with(new MultiLegJoiner());
+            DataSet<Flight> multiLeg8b = multiLeg4.join(multiLeg4, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where("f2.f2", "f4", "f5", "f14")
+                    .equalTo("f0.f2", "f4", "f5", "f12").with(new MultiLegJoiner());
             DataSet<Flight> multiLeg8 = multiLeg8a.union(multiLeg8b);
 
             DataSet<Flight> singleFltNoFlights = join4.union(multiLeg2).union(multiLeg3).union(multiLeg4).union(multiLeg5).union(multiLeg6).union(multiLeg7).union(multiLeg8);
@@ -1474,6 +1506,7 @@ public class FlightConnectionJoiner {
             singleFltNoFlights.write(nonStopFull, outputPath + "oneFull/", WriteMode.OVERWRITE);
 
             env.execute("Phase 0");
+            //System.out.println(env.getExecutionPlan());
         } else if (phase == 1) {
             ExecutionEnvironment env = ExecutionEnvironment.getExecutionEnvironment();
 
@@ -1528,7 +1561,8 @@ public class FlightConnectionJoiner {
             };
 
             DataSet<Tuple3<Flight, Flight, Flight>> threeLegConnections
-                    = twoLegConnectionsFiltered.join(twoLegConnectionsFiltered, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where("f1.f0.f0", "f1.f1", "f1.f2.f0", "f1.f4", "f1.f5").equalTo("f0.f0.f0", "f0.f1", "f0.f2.f0", "f0.f4", "f0.f5").with(new ThreeLegJoiner());
+                    = twoLegConnectionsFiltered.join(twoLegConnectionsFiltered, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE)
+                    .where("f1.f0.f0", "f1.f1", "f1.f2.f0", "f1.f4", "f1.f5").equalTo("f0.f0.f0", "f0.f1", "f0.f2.f0", "f0.f4", "f0.f5").with(new ThreeLegJoiner());
 
             FileOutputFormat threeLeg = new FlightOutput.ThreeLegFlightOutputFormat(new Path(outputPath + "three/"));
             threeLegConnections.write(threeLeg, outputPath + "three/", WriteMode.OVERWRITE);
@@ -1551,7 +1585,8 @@ public class FlightConnectionJoiner {
             //union.groupBy(0,1).sum(2).andMax(3).andMin(4).andSum(5).andSum(6).andMin(7).writeAsText(outputPath+"counts/aggregated/", WriteMode.OVERWRITE);
 
             env.execute("Phase 1");
-        } else if(phase == 2) {
+            //System.out.println(env.getExecutionPlan());
+        } else if (phase == 2) {
             ExecutionEnvironment env = ExecutionEnvironment.getExecutionEnvironment();
 
             DataSet<Flight> nonStopConnections = env.readFile(new FlightOutput.NonStopFullInputFormat(), outputPath + "oneFull/");
@@ -1566,14 +1601,14 @@ public class FlightConnectionJoiner {
             DataSet<ODCapacity> threeLegCaps = threeLegConnections.filter(new ThreeLegInternationalFilter())
                     .groupBy("f0.f0.f2", "f2.f2.f2").reduceGroup(new CapacityExtractor3());
 
-            DataSet<ODCapacity> ODCaps = nonStopCaps.union(twoLegCaps).union(threeLegCaps).groupBy(0,1).sum(2);
+            DataSet<ODCapacity> ODCaps = nonStopCaps.union(twoLegCaps).union(threeLegCaps).groupBy(0, 1).sum(2);
 
             ODCaps.writeAsCsv(outputPath + "ODCaps/", "\n", "^", WriteMode.OVERWRITE);
 
             // group keys: origin, destination, airline
             DataSet<ItineraryInfo.ItineraryInfo1> ii1 = nonStopConnections.filter(new NonStopInternationalFilter())
                     .groupBy("f0.f0", "f2.f0", "f4").reduceGroup(new CapacityReducer1())
-                    .join(ODCaps, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where("f0.f2", "f1.f2").equalTo(0,1).with(new CapShareJoiner1());
+                    .join(ODCaps, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where("f0.f2", "f1.f2").equalTo(0, 1).with(new CapShareJoiner1());
             // group keys: origin, destination, airline, origin, destination, airline
             DataSet<ItineraryInfo.ItineraryInfo2> ii2 = twoLegConnections.filter(new TwoLegInternationalFilter())
                     .groupBy("f0.f0.f0", "f0.f2.f0", "f0.f4", "f1.f0.f0", "f1.f2.f0", "f1.f4").reduceGroup(new CapacityReducer2())
@@ -1581,26 +1616,175 @@ public class FlightConnectionJoiner {
             // group keys: origin, destination, airline, origin, destination, airline, origin, destination, airline
             DataSet<ItineraryInfo.ItineraryInfo3> ii3 = threeLegConnections.filter(new ThreeLegInternationalFilter())
                     .groupBy("f0.f0.f0", "f0.f2.f0", "f0.f4", "f1.f0.f0", "f1.f2.f0", "f1.f4", "f2.f0.f0", "f2.f2.f0", "f2.f4").reduceGroup(new CapacityReducer3())
-                    .join(ODCaps, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where("f0.f2", "f7.f2").equalTo(0, 1).with(new CapShareJoiner3());;
-
+                    .join(ODCaps, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where("f0.f2", "f7.f2").equalTo(0, 1).with(new CapShareJoiner3());
 
             ii1.writeAsCsv(outputPath + "itinerary/one/", "\n", GeoInfo.DELIM, WriteMode.OVERWRITE);
             ii2.writeAsCsv(outputPath + "itinerary/two/", "\n", GeoInfo.DELIM, WriteMode.OVERWRITE);
             ii3.writeAsCsv(outputPath + "itinerary/three/", "\n", GeoInfo.DELIM, WriteMode.OVERWRITE);
 
-            env.execute("Phase 2");
+            //env.execute("Phase 2");
+            System.out.println(env.getExecutionPlan());
+        } else if (phase == 3) {
+            //
+            ExecutionEnvironment env = ExecutionEnvironment.getExecutionEnvironment();
+
+            DataSet<Flight> nonStopConnections = env.readFile(new FlightOutput.NonStopFullInputFormat(), outputPath + "oneFull/");
+            DataSet<Tuple2<Flight, Flight>> twoLegConnections = env.readFile(new FlightOutput.TwoLegFullInputFormat(), outputPath + "twoFull/");
+            DataSet<Tuple3<Flight, Flight, Flight>> threeLegConnections = env.readFile(new FlightOutput.ThreeLegFullInputFormat(), outputPath + "threeFull/");
+
+            // group keys: origin, destination, airline
+            DataSet<Tuple4<GeoInfo, GeoInfo, String, Integer>> it1 = nonStopConnections.map(new MapFunction<Flight, Tuple4<GeoInfo, GeoInfo, String, Integer>>() {
+
+                SimpleDateFormat format = new SimpleDateFormat("dd");
+
+                @Override
+                public Tuple4<GeoInfo, GeoInfo, String, Integer> map(Flight value) throws Exception {
+                    Date date = new Date(value.getDepartureTimestamp());
+                    String day = format.format(date);
+                    return new Tuple4<GeoInfo, GeoInfo, String, Integer>(value.f0, value.f2, day, value.getMaxCapacity());
+                }
+            }).groupBy("f0.f0", "f1.f0", "f2").sum(3);
+
+
+            // group keys: origin, destination, airline, origin, destination, airline
+            DataSet<Tuple4<GeoInfo, GeoInfo, GeoInfo, GeoInfo>> it2 = twoLegConnections.map(new MapFunction<Tuple2<Flight, Flight>, Tuple4<GeoInfo, GeoInfo, GeoInfo, GeoInfo>>() {
+                @Override
+                public Tuple4<GeoInfo, GeoInfo, GeoInfo, GeoInfo> map(Tuple2<Flight, Flight> value) throws Exception {
+                    return new Tuple4<GeoInfo, GeoInfo, GeoInfo, GeoInfo>(
+                            value.f0.f0, value.f0.f2, value.f1.f0, value.f1.f2
+                    );
+                }
+            }).distinct("f0.f0", "f1.f0", "f2.f0", "f3.f0");
+
+            DataSet<Tuple6<GeoInfo, GeoInfo, GeoInfo, GeoInfo, GeoInfo, GeoInfo>> it3 = threeLegConnections.map(new MapFunction<Tuple3<Flight, Flight, Flight>, Tuple6<GeoInfo, GeoInfo, GeoInfo, GeoInfo, GeoInfo, GeoInfo>>() {
+                @Override
+                public Tuple6<GeoInfo, GeoInfo, GeoInfo, GeoInfo, GeoInfo, GeoInfo> map(Tuple3<Flight, Flight, Flight> value) throws Exception {
+                    return new Tuple6<GeoInfo, GeoInfo, GeoInfo, GeoInfo, GeoInfo, GeoInfo>(
+                            value.f0.f0, value.f0.f2, value.f1.f0, value.f1.f2, value.f2.f0, value.f2.f2
+                    );
+                }
+            }).distinct("f0.f0", "f1.f0", "f2.f0", "f3.f0", "f4.f0", "f5.f0");
+
+
+            it1.writeAsCsv(outputPath + "routing/one/", "\n", ",", WriteMode.OVERWRITE).setParallelism(1);
+            it2.writeAsCsv(outputPath + "routing/two/", "\n", ",", WriteMode.OVERWRITE).setParallelism(1);
+            it3.writeAsCsv(outputPath + "routing/three/", "\n", ",", WriteMode.OVERWRITE).setParallelism(1);
+
+            env.execute("Phase 3");
+        } else if (phase == 4) {
+            final long WAITING_FACTOR = 3L;
+
+            ExecutionEnvironment env = ExecutionEnvironment.getExecutionEnvironment();
+
+            DataSet<Flight> nonStopConnections = env.readFile(new FlightOutput.NonStopFullInputFormat(), outputPath + "oneFull/");
+            DataSet<Tuple2<Flight, Flight>> twoLegConnections = env.readFile(new FlightOutput.TwoLegFullInputFormat(), outputPath + "twoFull/");
+            DataSet<Tuple3<Flight, Flight, Flight>> threeLegConnections = env.readFile(new FlightOutput.ThreeLegFullInputFormat(), outputPath + "threeFull/");
+
+            DataSet<Tuple8<String, Double, Double, String, Double, Double, String, Integer>> nonStop = nonStopConnections.map(new MapFunction<Flight, Tuple8<String, Double, Double, String, Double, Double, String, Integer>>() {
+                SimpleDateFormat format = new SimpleDateFormat("ddMMyyyy");
+
+                @Override
+                public Tuple8<String, Double, Double, String, Double, Double, String, Integer> map(Flight value) throws Exception {
+                    Date date = new Date(value.getDepartureTimestamp());
+                    String dayString = format.format(date);
+                    long duration = value.getArrivalTimestamp() - value.getDepartureTimestamp();
+                    Integer minutes = (int) (duration / (60L * 1000L));
+                    return new Tuple8<String, Double, Double, String, Double, Double, String, Integer>
+                            (value.getOriginAirport(), value.getOriginLatitude(), value.getOriginLongitude(), value.getDestinationAirport(), value.getDestinationLatitude(), value.getDestinationLongitude(), dayString, minutes);
+                }
+            });
+
+            DataSet<Tuple8<String, Double, Double, String, Double, Double, String, Integer>> twoLeg = twoLegConnections.map(new MapFunction<Tuple2<Flight, Flight>, Tuple8<String, Double, Double, String, Double, Double, String, Integer>>() {
+                SimpleDateFormat format = new SimpleDateFormat("ddMMyyyy");
+
+                @Override
+                public Tuple8<String, Double, Double, String, Double, Double, String, Integer> map(Tuple2<Flight, Flight> value) throws Exception {
+                    Date date = new Date(value.f0.getDepartureTimestamp());
+                    String dayString = format.format(date);
+                    long flight1 = value.f0.getArrivalTimestamp() - value.f0.getDepartureTimestamp();
+                    long wait1 = WAITING_FACTOR * (value.f1.getDepartureTimestamp() - value.f0.getArrivalTimestamp());
+                    long flight2 = value.f1.getArrivalTimestamp() - value.f1.getDepartureTimestamp();
+                    long duration = flight1 + wait1 + flight2;
+                    Integer minutes = (int) (duration / (60L * 1000L));
+                    return new Tuple8<String, Double, Double, String, Double, Double, String, Integer>
+                            (value.f0.getOriginAirport(), value.f0.getOriginLatitude(), value.f0.getOriginLongitude(), value.f1.getDestinationAirport(), value.f1.getDestinationLatitude(), value.f1.getDestinationLongitude(), dayString, minutes);
+                }
+            });
+
+            DataSet<Tuple8<String, Double, Double, String, Double, Double, String, Integer>> threeLeg = threeLegConnections.map(new MapFunction<Tuple3<Flight, Flight, Flight>, Tuple8<String, Double, Double, String, Double, Double, String, Integer>>() {
+                SimpleDateFormat format = new SimpleDateFormat("ddMMyyyy");
+
+                @Override
+                public Tuple8<String, Double, Double, String, Double, Double, String, Integer> map(Tuple3<Flight, Flight, Flight> value) throws Exception {
+                    Date date = new Date(value.f0.getDepartureTimestamp());
+                    String dayString = format.format(date);
+                    long flight1 = value.f0.getArrivalTimestamp() - value.f0.getDepartureTimestamp();
+                    long wait1 = WAITING_FACTOR * (value.f1.getDepartureTimestamp() - value.f0.getArrivalTimestamp());
+                    long flight2 = value.f1.getArrivalTimestamp() - value.f1.getDepartureTimestamp();
+                    long wait2 = WAITING_FACTOR * (value.f2.getDepartureTimestamp() - value.f1.getArrivalTimestamp());
+                    long flight3 = value.f2.getArrivalTimestamp() - value.f2.getDepartureTimestamp();
+                    long duration = flight1 + wait1 + flight2 + wait2 + flight3;
+                    Integer minutes = (int) (duration / (60L * 1000L));
+                    return new Tuple8<String, Double, Double, String, Double, Double, String, Integer>
+                            (value.f0.getOriginAirport(), value.f0.getOriginLatitude(), value.f0.getOriginLongitude(), value.f2.getDestinationAirport(), value.f2.getDestinationLatitude(), value.f2.getDestinationLongitude(), dayString, minutes);
+                }
+            });
+
+            DataSet<Tuple8<String, Double, Double, String, Double, Double, String, Integer>> flights = nonStop.union(twoLeg).union(threeLeg);
+            DataSet<Tuple11<String, Double, Double, String, Double, Double, String, Integer, Integer, Double, Integer>> result = flights.groupBy(0, 1, 2, 3, 4, 5, 6).reduceGroup(new GroupReduceFunction<Tuple8<String, Double, Double, String, Double, Double, String, Integer>, Tuple11<String, Double, Double, String, Double, Double, String, Integer, Integer, Double, Integer>>() {
+                @Override
+                public void reduce(Iterable<Tuple8<String, Double, Double, String, Double, Double, String, Integer>> values, Collector<Tuple11<String, Double, Double, String, Double, Double, String, Integer, Integer, Double, Integer>> out) throws Exception {
+                    Tuple11<String, Double, Double, String, Double, Double, String, Integer, Integer, Double, Integer> result =
+                            new Tuple11<String, Double, Double, String, Double, Double, String, Integer, Integer, Double, Integer>();
+                    int min = Integer.MAX_VALUE;
+                    int max = Integer.MIN_VALUE;
+                    int sum = 0;
+                    int count = 0;
+                    boolean first = true;
+                    for (Tuple8<String, Double, Double, String, Double, Double, String, Integer> t : values) {
+                        if (first) {
+                            result.f0 = t.f0;
+                            result.f1 = t.f1;
+                            result.f2 = t.f2;
+                            result.f3 = t.f3;
+                            result.f4 = t.f4;
+                            result.f5 = t.f5;
+                            result.f6 = t.f6;
+                            first = false;
+                        }
+                        int minutes = t.f7;
+                        sum += minutes;
+                        count++;
+                        if (minutes < min) {
+                            min = minutes;
+                        }
+                        if (minutes > max) {
+                            max = minutes;
+                        }
+                    }
+                    Double avg = (double) sum / (double) count;
+                    result.f7 = min;
+                    result.f8 = max;
+                    result.f9 = avg;
+                    result.f10 = count;
+                    out.collect(result);
+                }
+            });
+
+            result.writeAsCsv(outputPath + "gravity/", "\n", ",", WriteMode.OVERWRITE).setParallelism(1);
+            env.execute("Phase 4");
         } else {
             throw new Exception("Invalid parameter! phase: " + phase);
         }
         //System.out.println(env.getExecutionPlan());
         long end = System.currentTimeMillis();
-        LOG.info("Job ended at {} milliseconds. Running Time: {}", end, end-start);
-	}
+        LOG.info("Job ended at {} milliseconds. Running Time: {}", end, end - start);
+    }
 
     /* HELPER FUNCTIONS */
 
     public static int getMinCap(Tuple2<Flight, Flight> conn) {
-        if(conn.f0.getMaxCapacity() < conn.f1.getMaxCapacity()) {
+        if (conn.f0.getMaxCapacity() < conn.f1.getMaxCapacity()) {
             return conn.f0.getMaxCapacity();
         } else {
             return conn.f1.getMaxCapacity();
@@ -1608,9 +1792,9 @@ public class FlightConnectionJoiner {
     }
 
     public static int getMinCap(Tuple3<Flight, Flight, Flight> conn) {
-        if(conn.f0.getMaxCapacity() <= conn.f1.getMaxCapacity() && conn.f0.getMaxCapacity() <= conn.f2.getMaxCapacity()) {
+        if (conn.f0.getMaxCapacity() <= conn.f1.getMaxCapacity() && conn.f0.getMaxCapacity() <= conn.f2.getMaxCapacity()) {
             return conn.f0.getMaxCapacity();
-        } else if(conn.f1.getMaxCapacity() <= conn.f0.getMaxCapacity() && conn.f1.getMaxCapacity() <= conn.f2.getMaxCapacity()){
+        } else if (conn.f1.getMaxCapacity() <= conn.f0.getMaxCapacity() && conn.f1.getMaxCapacity() <= conn.f2.getMaxCapacity()) {
             return conn.f1.getMaxCapacity();
         } else {
             return conn.f2.getMaxCapacity();
@@ -1652,7 +1836,7 @@ public class FlightConnectionJoiner {
         double legDistanceSum = 0.0;
         legDistanceSum += dist(originLatitude, originLongitude, hubLatitude, hubLongitude);
         legDistanceSum += dist(hubLatitude, hubLongitude, destLatitude, destLongitude);
-        return (legDistanceSum/ODDist) <= computeMaxGeoDetour(ODDist);
+        return (legDistanceSum / ODDist) <= computeMaxGeoDetour(ODDist);
     }
 
     /**
@@ -1678,15 +1862,15 @@ public class FlightConnectionJoiner {
         legDistanceSum += dist(originLatitude, originLongitude, hub1Latitude, hub1Longitude);
         legDistanceSum += dist(hub1Latitude, hub1Longitude, hub2Latitude, hub2Longitude);
         legDistanceSum += dist(hub2Latitude, hub2Longitude, destLatitude, destLongitude);
-        return (legDistanceSum/ODDist) <= computeMaxGeoDetour(ODDist);
+        return (legDistanceSum / ODDist) <= computeMaxGeoDetour(ODDist);
     }
 
     private static double computeMaxGeoDetour(double ODDist) {
-        return Math.min(1.5, -0.365*Math.log(ODDist)+4.8);
+        return Math.min(1.5, -0.365 * Math.log(ODDist) + 4.8);
     }
 
     private static long computeMaxCT(double ODDist) {
-        return (long) (180.0*Math.log(ODDist+1000.0)-1000.0);
+        return (long) (180.0 * Math.log(ODDist + 1000.0) - 1000.0);
     }
 
     private static long computeMinCT() {
@@ -1706,7 +1890,7 @@ public class FlightConnectionJoiner {
     }
 
     private static double travelTimeAt100kphInMinutes(double ODDist) {
-        return (ODDist*60.0)/100.0;
+        return (ODDist * 60.0) / 100.0;
     }
 
     /**
@@ -1743,7 +1927,7 @@ public class FlightConnectionJoiner {
             } else {
                 invalid++;
             }
-            while(iter.hasNext()) {
+            while (iter.hasNext()) {
                 flight = iter.next().clone();
                 count++;
                 cap = flight.getMaxCapacity();
@@ -1833,18 +2017,18 @@ public class FlightConnectionJoiner {
                 flight = iter.next().copy();
                 count++;
                 cap = getMinCap(flight);
-                if(cap > 0) {
+                if (cap > 0) {
                     sum += cap;
-                    if(cap < min) {
+                    if (cap < min) {
                         min = cap;
                     }
-                    if(cap > max) {
+                    if (cap > max) {
                         max = cap;
                     }
                 } else {
                     invalid++;
                 }
-            } while(iter.hasNext());
+            } while (iter.hasNext());
             output.f0 = flight.f0.getOriginAirport();
             output.f1 = flight.f2.getDestinationAirport();
             output.f2 = count;
@@ -1867,7 +2051,7 @@ public class FlightConnectionJoiner {
     private static String outputPath;
 
     private static boolean parseParameters(String[] args) {
-        if(args.length == 0) {
+        if (args.length == 0) {
             schedulePath = "file:///home/robert/Amadeus/data/week/";//"hdfs:///user/rwaury/input/all_catalog_140410.txt";//
             oriPath = "file:///home/robert/Amadeus/data/ori_por_public.txt";//"hdfs:///user/rwaury/input/ori_por_public.csv";//
             regionPath = "file:///home/robert/Amadeus/data/ori_country_region_info.csv";//"hdfs:///user/rwaury/input/ori_country_region_info.csv";//
@@ -1877,7 +2061,7 @@ public class FlightConnectionJoiner {
             outputPath = "file:///home/robert/Amadeus/data/resultConnections/";//"hdfs:///user/rwaury/output/flights/";//
             return true;
         }
-        if(args.length == 1) {
+        if (args.length == 1) {
             schedulePath = "hdfs:///user/rwaury/input/all_catalog_140410.txt";//
             oriPath = "hdfs:///user/rwaury/input/ori_por_public.csv";//
             regionPath = "hdfs:///user/rwaury/input/ori_country_region_info.csv";//
@@ -1890,7 +2074,6 @@ public class FlightConnectionJoiner {
         //System.err.println("Usage: FlightConnectionJoiner <schedule path> <ori path> <output path>");
         return false;
     }
-
 
 
 }
