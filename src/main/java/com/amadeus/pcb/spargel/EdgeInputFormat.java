@@ -7,7 +7,7 @@ import org.apache.flink.core.memory.DataInputView;
 import java.io.IOException;
 
 @SuppressWarnings("serial")
-public class EdgeInputFormat extends TupleInputFormat<Tuple3<String, String, ConnectionInfo>> {
+public class EdgeInputFormat extends org.apache.flink.api.common.io.BinaryInputFormat<Tuple3<String, String, ConnectionInfo>> {
 
 	@Override
 	protected Tuple3<String, String, ConnectionInfo> deserialize(Tuple3<String, String, ConnectionInfo> reuse, DataInputView dataInput)

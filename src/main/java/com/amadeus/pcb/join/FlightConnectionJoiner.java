@@ -1499,11 +1499,12 @@ public class FlightConnectionJoiner {
             multiLeg8.write(multi8, outputPath+"multileg8/", WriteMode.OVERWRITE);
             */
 
-            FileOutputFormat nonStop = new FlightOutput.NonStopFlightOutputFormat(new Path(outputPath + "one/"));
-            singleFltNoFlights.filter(new NonStopTrafficRestrictionsFilter()).write(nonStop, outputPath + "one/", WriteMode.OVERWRITE);
+            FileOutputFormat nonStop = new FlightOutput.NonStopFlightOutputFormat(new Path(outputPath + "one"));
+            singleFltNoFlights.filter(new NonStopTrafficRestrictionsFilter()).write(nonStop, outputPath + "one", WriteMode.OVERWRITE);
 
             FileOutputFormat nonStopFull = new FlightOutput.NonStopFullOutputFormat();
-            singleFltNoFlights.write(nonStopFull, outputPath + "oneFull/", WriteMode.OVERWRITE);
+            singleFltNoFlights.write(nonStopFull, outputPath + "oneFull", WriteMode.OVERWRITE);
+
 
             env.execute("Phase 0");
             //System.out.println(env.getExecutionPlan());
@@ -1529,6 +1530,7 @@ public class FlightConnectionJoiner {
 
             DataSet<Tuple2<Flight, Flight>> twoLegConnections = twoLegConnections1.union(twoLegConnections2);
 
+
             //FileOutputFormat twoLegUF = new FlightOutput.TwoLegFlightOutputFormat(new Path(outputPath+"twoUF/"));
             //twoLegConnections.write(twoLegUF, outputPath+"twoUF/", WriteMode.OVERWRITE);
 
@@ -1543,11 +1545,11 @@ public class FlightConnectionJoiner {
 
             DataSet<Tuple2<Flight, Flight>> twoLegConnectionsFiltered = twoLegConnections.coGroup(mctData).where("f0.f2.f0").equalTo(0).with(new MCTFilter());
 
-            FileOutputFormat twoLeg = new FlightOutput.TwoLegFlightOutputFormat(new Path(outputPath + "two/"));
-            twoLegConnectionsFiltered.write(twoLeg, outputPath + "two/", WriteMode.OVERWRITE);
+            FileOutputFormat twoLeg = new FlightOutput.TwoLegFlightOutputFormat(new Path(outputPath + "two"));
+            twoLegConnectionsFiltered.write(twoLeg, outputPath + "two", WriteMode.OVERWRITE);
 
             FileOutputFormat twoLegFull = new FlightOutput.TwoLegFullOutputFormat();
-            twoLegConnectionsFiltered.write(twoLegFull, outputPath + "twoFull/", WriteMode.OVERWRITE);
+            twoLegConnectionsFiltered.write(twoLegFull, outputPath + "twoFull", WriteMode.OVERWRITE);
 
             KeySelector<Tuple2<Flight, Flight>, String> ks0 = new KeySelector<Tuple2<Flight, Flight>, String>() {
                 public String getKey(Tuple2<Flight, Flight> tuple) {
@@ -1562,13 +1564,13 @@ public class FlightConnectionJoiner {
 
             DataSet<Tuple3<Flight, Flight, Flight>> threeLegConnections
                     = twoLegConnectionsFiltered.join(twoLegConnectionsFiltered, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE)
-                    .where("f1.f0.f0", "f1.f1", "f1.f2.f0", "f1.f4", "f1.f5").equalTo("f0.f0.f0", "f0.f1", "f0.f2.f0", "f0.f4", "f0.f5").with(new ThreeLegJoiner());
+                    .where("f1.f0.f0", "f1.f1", "f1.f2.f0", "f1.f3", "f1.f4", "f1.f5").equalTo("f0.f0.f0", "f0.f1", "f0.f2.f0", "f0.f3", "f0.f4", "f0.f5").with(new ThreeLegJoiner());
 
-            FileOutputFormat threeLeg = new FlightOutput.ThreeLegFlightOutputFormat(new Path(outputPath + "three/"));
-            threeLegConnections.write(threeLeg, outputPath + "three/", WriteMode.OVERWRITE);
+            FileOutputFormat threeLeg = new FlightOutput.ThreeLegFlightOutputFormat(new Path(outputPath + "three"));
+            threeLegConnections.write(threeLeg, outputPath + "three", WriteMode.OVERWRITE);
 
             FileOutputFormat threeLegFull = new FlightOutput.ThreeLegFullOutputFormat();
-            threeLegConnections.write(threeLegFull, outputPath + "threeFull/", WriteMode.OVERWRITE);
+            threeLegConnections.write(threeLegFull, outputPath + "threeFull", WriteMode.OVERWRITE);
 
             //DataSet<ConnectionStats> ODCounts1 = join4.groupBy(0,9).reduceGroup(new ODCounter1());
             //ODCounts1.writeAsText(outputPath+"counts/one/", WriteMode.OVERWRITE);
@@ -1603,7 +1605,7 @@ public class FlightConnectionJoiner {
 
             DataSet<ODCapacity> ODCaps = nonStopCaps.union(twoLegCaps).union(threeLegCaps).groupBy(0, 1).sum(2);
 
-            ODCaps.writeAsCsv(outputPath + "ODCaps/", "\n", "^", WriteMode.OVERWRITE);
+            ODCaps.writeAsCsv(outputPath + "ODCaps", "\n", "^", WriteMode.OVERWRITE);
 
             // group keys: origin, destination, airline
             DataSet<ItineraryInfo.ItineraryInfo1> ii1 = nonStopConnections.filter(new NonStopInternationalFilter())
@@ -1618,9 +1620,9 @@ public class FlightConnectionJoiner {
                     .groupBy("f0.f0.f0", "f0.f2.f0", "f0.f4", "f1.f0.f0", "f1.f2.f0", "f1.f4", "f2.f0.f0", "f2.f2.f0", "f2.f4").reduceGroup(new CapacityReducer3())
                     .join(ODCaps, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where("f0.f2", "f7.f2").equalTo(0, 1).with(new CapShareJoiner3());
 
-            ii1.writeAsCsv(outputPath + "itinerary/one/", "\n", GeoInfo.DELIM, WriteMode.OVERWRITE);
-            ii2.writeAsCsv(outputPath + "itinerary/two/", "\n", GeoInfo.DELIM, WriteMode.OVERWRITE);
-            ii3.writeAsCsv(outputPath + "itinerary/three/", "\n", GeoInfo.DELIM, WriteMode.OVERWRITE);
+            ii1.writeAsCsv(outputPath + "itinerary/one", "\n", GeoInfo.DELIM, WriteMode.OVERWRITE);
+            ii2.writeAsCsv(outputPath + "itinerary/two", "\n", GeoInfo.DELIM, WriteMode.OVERWRITE);
+            ii3.writeAsCsv(outputPath + "itinerary/three", "\n", GeoInfo.DELIM, WriteMode.OVERWRITE);
 
             //env.execute("Phase 2");
             System.out.println(env.getExecutionPlan());
@@ -1666,9 +1668,9 @@ public class FlightConnectionJoiner {
             }).distinct("f0.f0", "f1.f0", "f2.f0", "f3.f0", "f4.f0", "f5.f0");
 
 
-            it1.writeAsCsv(outputPath + "routing/one/", "\n", ",", WriteMode.OVERWRITE).setParallelism(1);
-            it2.writeAsCsv(outputPath + "routing/two/", "\n", ",", WriteMode.OVERWRITE).setParallelism(1);
-            it3.writeAsCsv(outputPath + "routing/three/", "\n", ",", WriteMode.OVERWRITE).setParallelism(1);
+            it1.writeAsCsv(outputPath + "routing/one", "\n", ",", WriteMode.OVERWRITE).setParallelism(1);
+            it2.writeAsCsv(outputPath + "routing/two", "\n", ",", WriteMode.OVERWRITE).setParallelism(1);
+            it3.writeAsCsv(outputPath + "routing/three", "\n", ",", WriteMode.OVERWRITE).setParallelism(1);
 
             env.execute("Phase 3");
         } else if (phase == 4) {
@@ -1676,9 +1678,9 @@ public class FlightConnectionJoiner {
 
             ExecutionEnvironment env = ExecutionEnvironment.getExecutionEnvironment();
 
-            DataSet<Flight> nonStopConnections = env.readFile(new FlightOutput.NonStopFullInputFormat(), outputPath + "oneFull/");
-            DataSet<Tuple2<Flight, Flight>> twoLegConnections = env.readFile(new FlightOutput.TwoLegFullInputFormat(), outputPath + "twoFull/");
-            DataSet<Tuple3<Flight, Flight, Flight>> threeLegConnections = env.readFile(new FlightOutput.ThreeLegFullInputFormat(), outputPath + "threeFull/");
+            DataSet<Flight> nonStopConnections = env.readFile(new FlightOutput.NonStopFullInputFormat(), outputPath + "oneFull");
+            DataSet<Tuple2<Flight, Flight>> twoLegConnections = env.readFile(new FlightOutput.TwoLegFullInputFormat(), outputPath + "twoFull");
+            DataSet<Tuple3<Flight, Flight, Flight>> threeLegConnections = env.readFile(new FlightOutput.ThreeLegFullInputFormat(), outputPath + "threeFull");
 
             DataSet<Tuple8<String, Double, Double, String, Double, Double, String, Integer>> nonStop = nonStopConnections.map(new MapFunction<Flight, Tuple8<String, Double, Double, String, Double, Double, String, Integer>>() {
                 SimpleDateFormat format = new SimpleDateFormat("ddMMyyyy");
@@ -1688,6 +1690,8 @@ public class FlightConnectionJoiner {
                     Date date = new Date(value.getDepartureTimestamp());
                     String dayString = format.format(date);
                     long duration = value.getArrivalTimestamp() - value.getDepartureTimestamp();
+                    if(duration <= 0L)
+                        throw new Exception("Value error: " + value.toString());
                     Integer minutes = (int) (duration / (60L * 1000L));
                     return new Tuple8<String, Double, Double, String, Double, Double, String, Integer>
                             (value.getOriginAirport(), value.getOriginLatitude(), value.getOriginLongitude(), value.getDestinationAirport(), value.getDestinationLatitude(), value.getDestinationLongitude(), dayString, minutes);
@@ -1705,6 +1709,8 @@ public class FlightConnectionJoiner {
                     long wait1 = WAITING_FACTOR * (value.f1.getDepartureTimestamp() - value.f0.getArrivalTimestamp());
                     long flight2 = value.f1.getArrivalTimestamp() - value.f1.getDepartureTimestamp();
                     long duration = flight1 + wait1 + flight2;
+                    if(duration <= 0L)
+                        throw new Exception("Value error: " + value.toString());
                     Integer minutes = (int) (duration / (60L * 1000L));
                     return new Tuple8<String, Double, Double, String, Double, Double, String, Integer>
                             (value.f0.getOriginAirport(), value.f0.getOriginLatitude(), value.f0.getOriginLongitude(), value.f1.getDestinationAirport(), value.f1.getDestinationLatitude(), value.f1.getDestinationLongitude(), dayString, minutes);
@@ -1724,6 +1730,8 @@ public class FlightConnectionJoiner {
                     long wait2 = WAITING_FACTOR * (value.f2.getDepartureTimestamp() - value.f1.getArrivalTimestamp());
                     long flight3 = value.f2.getArrivalTimestamp() - value.f2.getDepartureTimestamp();
                     long duration = flight1 + wait1 + flight2 + wait2 + flight3;
+                    if(duration <= 0L)
+                        throw new Exception("Value error: " + value.toString());
                     Integer minutes = (int) (duration / (60L * 1000L));
                     return new Tuple8<String, Double, Double, String, Double, Double, String, Integer>
                             (value.f0.getOriginAirport(), value.f0.getOriginLatitude(), value.f0.getOriginLongitude(), value.f2.getDestinationAirport(), value.f2.getDestinationLatitude(), value.f2.getDestinationLongitude(), dayString, minutes);
@@ -1771,7 +1779,7 @@ public class FlightConnectionJoiner {
                 }
             });
 
-            result.writeAsCsv(outputPath + "gravity/", "\n", ",", WriteMode.OVERWRITE).setParallelism(1);
+            result.writeAsCsv(outputPath + "gravity", "\n", ",", WriteMode.OVERWRITE);
             env.execute("Phase 4");
         } else {
             throw new Exception("Invalid parameter! phase: " + phase);

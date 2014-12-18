@@ -7,7 +7,7 @@ import org.apache.flink.core.memory.DataOutputView;
 import java.io.IOException;
 
 @SuppressWarnings("serial")
-public class VertexOutputFormat extends TupleOutputFormat<Tuple2<String, AirportInfo>> {
+public class VertexOutputFormat extends org.apache.flink.api.common.io.BinaryOutputFormat<Tuple2<String, AirportInfo>> {
 
 	@Override
 	protected void serialize(Tuple2<String, AirportInfo> record,

@@ -7,7 +7,7 @@ import org.apache.flink.core.memory.DataInputView;
 import java.io.IOException;
 
 @SuppressWarnings("serial")
-public class VertexInputFormat extends TupleInputFormat<Tuple2<String, AirportInfo>> {
+public class VertexInputFormat extends org.apache.flink.api.common.io.BinaryInputFormat<Tuple2<String, AirportInfo>> {
 
 	@Override
 	protected Tuple2<String, AirportInfo> deserialize(

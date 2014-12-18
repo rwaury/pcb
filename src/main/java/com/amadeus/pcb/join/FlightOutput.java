@@ -2,8 +2,8 @@ package com.amadeus.pcb.join;
 
 import java.nio.charset.Charset;
 
-import com.amadeus.pcb.spargel.TupleInputFormat;
-import com.amadeus.pcb.spargel.TupleOutputFormat;
+import org.apache.flink.api.common.io.BinaryInputFormat;
+import org.apache.flink.api.common.io.BinaryOutputFormat;
 import org.apache.flink.api.java.io.TextOutputFormat;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.api.java.tuple.Tuple3;
@@ -12,7 +12,6 @@ import org.apache.flink.core.memory.DataInputView;
 import org.apache.flink.core.memory.DataOutputView;
 
 import java.io.IOException;
-import java.text.SimpleDateFormat;
 import java.util.Date;
 
 public class FlightOutput {
@@ -83,7 +82,9 @@ public class FlightOutput {
     }
 
 
-    public static class NonStopFullOutputFormat extends TupleOutputFormat<Flight> {
+    public static class NonStopFullOutputFormat extends BinaryOutputFormat<Flight> {
+
+        public NonStopFullOutputFormat() {super();}
 
         public static void serializeStatic(Flight record, DataOutputView out) throws IOException {
             record.f0.write(out);
@@ -109,7 +110,9 @@ public class FlightOutput {
         }
     }
 
-    public static class NonStopFullInputFormat extends TupleInputFormat<Flight> {
+    public static class NonStopFullInputFormat extends BinaryInputFormat<Flight> {
+
+        public NonStopFullInputFormat() {super();}
 
         public static Flight deserializeStatic(Flight reuse, DataInputView in) throws IOException {
             reuse.f0.read(in);
@@ -137,7 +140,9 @@ public class FlightOutput {
     }
 
 
-    public static class TwoLegFullOutputFormat extends TupleOutputFormat<Tuple2<Flight, Flight>> {
+    public static class TwoLegFullOutputFormat extends BinaryOutputFormat<Tuple2<Flight, Flight>> {
+
+        public TwoLegFullOutputFormat() {super();}
 
         @Override
         protected void serialize(Tuple2<Flight, Flight> record, DataOutputView out) throws IOException {
@@ -146,7 +151,9 @@ public class FlightOutput {
         }
     }
 
-    public static class TwoLegFullInputFormat extends TupleInputFormat<Tuple2<Flight, Flight>> {
+    public static class TwoLegFullInputFormat extends BinaryInputFormat<Tuple2<Flight, Flight>> {
+
+        public TwoLegFullInputFormat() {super();}
 
         @Override
         protected Tuple2<Flight, Flight> deserialize(Tuple2<Flight, Flight> reuse, DataInputView in) throws IOException {
@@ -159,7 +166,9 @@ public class FlightOutput {
     }
 
 
-    public static class ThreeLegFullOutputFormat extends TupleOutputFormat<Tuple3<Flight, Flight, Flight>> {
+    public static class ThreeLegFullOutputFormat extends BinaryOutputFormat<Tuple3<Flight, Flight, Flight>> {
+
+        public ThreeLegFullOutputFormat() {super();}
 
         @Override
         protected void serialize(Tuple3<Flight, Flight, Flight> record, DataOutputView out) throws IOException {
@@ -169,7 +178,9 @@ public class FlightOutput {
         }
     }
 
-    public static class ThreeLegFullInputFormat extends TupleInputFormat<Tuple3<Flight, Flight, Flight>> {
+    public static class ThreeLegFullInputFormat extends BinaryInputFormat<Tuple3<Flight, Flight, Flight>> {
+
+        public ThreeLegFullInputFormat() {super();}
 
         @Override
         protected Tuple3<Flight, Flight, Flight> deserialize(Tuple3<Flight, Flight, Flight> reuse, DataInputView in) throws IOException {

@@ -7,7 +7,7 @@ import org.apache.flink.core.memory.DataOutputView;
 import java.io.IOException;
 
 @SuppressWarnings("serial")
-public class EdgeOutputFormat extends TupleOutputFormat<Tuple3<String, String, ConnectionInfo>> {
+public class EdgeOutputFormat extends org.apache.flink.api.common.io.BinaryOutputFormat<Tuple3<String, String, ConnectionInfo>> {
 
 	@Override
 	protected void serialize(Tuple3<String, String, ConnectionInfo> record,
