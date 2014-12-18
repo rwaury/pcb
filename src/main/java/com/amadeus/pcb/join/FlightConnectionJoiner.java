@@ -1781,6 +1781,57 @@ public class FlightConnectionJoiner {
 
             result.writeAsCsv(outputPath + "gravity", "\n", ",", WriteMode.OVERWRITE);
             env.execute("Phase 4");
+        } else if (phase == 5) {
+            ExecutionEnvironment env = ExecutionEnvironment.getExecutionEnvironment();
+
+            DataSet<Flight> nonStopConnections = env.readFile(new FlightOutput.NonStopFullInputFormat(), outputPath + "oneFull");
+
+            DataSet<Tuple7<String, Double, Double, String, Integer, Integer, Boolean>> inOutCapa = nonStopConnections.flatMap(new FlatMapFunction<Flight, Tuple7<String, Double, Double, String, Integer, Integer, Boolean>>() {
+                SimpleDateFormat format = new SimpleDateFormat("ddMMyyyy");
+
+                @Override
+                public void flatMap(Flight flight, Collector<Tuple7<String, Double, Double, String, Integer, Integer, Boolean>> out) throws Exception {
+                    if(flight.getLegCount() > 1) {
+                        return;
+                    }
+                    Date date = new Date(flight.getDepartureTimestamp());
+                    String dayString = format.format(date);
+                    boolean isInternational = !flight.getOriginCountry().equals(flight.getDestinationCountry());
+                    Tuple7<String, Double, Double, String, Integer, Integer, Boolean> outgoing = new Tuple7<String, Double, Double, String, Integer, Integer, Boolean>
+                    (flight.getOriginAirport(), flight.getOriginLatitude(), flight.getOriginLongitude(), dayString, flight.getMaxCapacity(), 0, isInternational);
+                    Tuple7<String, Double, Double, String, Integer, Integer, Boolean> incoming = new Tuple7<String, Double, Double, String, Integer, Integer, Boolean>
+                    (flight.getDestinationAirport(), flight.getDestinationLatitude(), flight.getDestinationLongitude(), dayString, 0, flight.getMaxCapacity(), isInternational);
+                    out.collect(incoming);
+                    out.collect(outgoing);
+                }
+            });
+
+            DataSet<Tuple7<String, Double, Double, String, Integer, Integer, Boolean>> result = inOutCapa.groupBy(0,3,6).reduceGroup(new GroupReduceFunction<Tuple7<String, Double, Double, String, Integer, Integer, Boolean>, Tuple7<String, Double, Double, String, Integer, Integer, Boolean>>() {
+                @Override
+                public void reduce(Iterable<Tuple7<String, Double, Double, String, Integer, Integer, Boolean>> tuple7s,
+                                   Collector<Tuple7<String, Double, Double, String, Integer, Integer, Boolean>> out) throws Exception {
+                    boolean first = true;
+                    Tuple7<String, Double, Double, String, Integer, Integer, Boolean> result = new Tuple7<String, Double, Double, String, Integer, Integer, Boolean>();
+                    for(Tuple7<String, Double, Double, String, Integer, Integer, Boolean> t : tuple7s) {
+                        if(first) {
+                            result.f0 = t.f0;
+                            result.f1 = t.f1;
+                            result.f2 = t.f2;
+                            result.f3 = t.f3;
+                            result.f4 = 0;
+                            result.f5 = 0;
+                            result.f6 = t.f6;
+                            first = false;
+                        }
+                        result.f4 += t.f4;
+                        result.f5 += t.f5;
+                    }
+                    out.collect(result);
+                }
+            });
+
+            result.writeAsCsv(outputPath + "loads", "\n", ",", WriteMode.OVERWRITE);
+            env.execute("Phase 5");
         } else {
             throw new Exception("Invalid parameter! phase: " + phase);
         }
