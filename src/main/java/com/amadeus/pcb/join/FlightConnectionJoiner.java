@@ -1674,7 +1674,7 @@ public class FlightConnectionJoiner {
 
             env.execute("Phase 3");
         } else if (phase == 4) {
-            final long WAITING_FACTOR = 3L;
+            final long WAITING_FACTOR = 1L;
 
             ExecutionEnvironment env = ExecutionEnvironment.getExecutionEnvironment();
 
@@ -1832,6 +1832,257 @@ public class FlightConnectionJoiner {
 
             result.writeAsCsv(outputPath + "loads", "\n", ",", WriteMode.OVERWRITE);
             env.execute("Phase 5");
+        } else if(phase == 6) {
+            ExecutionEnvironment env = ExecutionEnvironment.getExecutionEnvironment();
+
+            DataSet<Tuple4<String, String, Integer, Integer>> loads = env.readCsvFile(outputPath + "loads")
+                    .includeFields(true, false, false, true, true, true, false)
+                    .types(String.class, String.class, Integer.class, Integer.class);
+
+            DataSet<Tuple4<String, String, String, Integer>> distance = env.readCsvFile(outputPath + "gravity")
+                    .includeFields(true, false, false, true, false, false, true, true, false, false, false)
+                    .types(String.class, String.class, String.class, Integer.class);
+
+            DataSet<Tuple4<String, String, Integer, Integer>> agg = loads.groupBy(0, 1).sum(2).andSum(3);
+
+            DataSet<Tuple3<String, String, Integer>> outgoing = agg.groupBy(0,1).sum(2).project(0,1,2);
+            DataSet<Tuple3<String, String, Integer>> incoming = agg.groupBy(0,1).sum(3).project(0,1,3);
+
+            DataSet<Tuple2<String, Integer>> outgoingSum = outgoing.groupBy(1).sum(2).project(1,2);
+
+            outgoingSum.writeAsCsv(outputPath + "outsum", "\n", ",", WriteMode.OVERWRITE).setParallelism(1);
+
+            DataSet<Tuple4<String, String, String, Long>> trafficMatrixIn = distance.join(incoming).where(0,2).equalTo(0,1)
+                    .with(new JoinFunction<Tuple4<String, String, String, Integer>, Tuple3<String, String, Integer>, Tuple4<String, String, String, Long>>() {
+                 @Override
+                 public Tuple4<String, String, String, Long> join(Tuple4<String, String, String, Integer> distance, Tuple3<String, String, Integer> incoming) throws Exception {
+                     Tuple4<String, String, String, Long> result = new Tuple4<String, String, String, Long>();
+                     result.f0 = distance.f0;
+                     result.f1 = distance.f1;
+                     result.f2 = distance.f2;
+                     result.f3 = (long) incoming.f2;
+                     return result;
+                 }
+             });
+
+            DataSet<Tuple4<String, String, String, Long>> trafficMatrixOut = trafficMatrixIn.join(outgoing).where(1,2).equalTo(0,1)
+                    .with(new JoinFunction<Tuple4<String, String, String, Long>, Tuple3<String, String, Integer>, Tuple4<String, String, String, Long>>() {
+                @Override
+                public Tuple4<String, String, String, Long> join(Tuple4<String, String, String, Long> tmIn, Tuple3<String, String, Integer> outgoing) throws Exception {
+                    Tuple4<String, String, String, Long> result = new Tuple4<String, String, String, Long>();
+                    result.f0 = tmIn.f0;
+                    result.f1 = tmIn.f1;
+                    result.f2 = tmIn.f2;
+                    result.f3 = tmIn.f3 * (long) outgoing.f2;
+                    return result;
+                }
+            });
+
+            DataSet<Tuple4<String, String, String, Double>> trafficMatrix = trafficMatrixOut.joinWithTiny(outgoingSum).where(2).equalTo(0)
+                    .with(new JoinFunction<Tuple4<String, String, String, Long>, Tuple2<String, Integer>, Tuple4<String, String, String, Double>>() {
+                @Override
+                public Tuple4<String, String, String, Double> join(Tuple4<String, String, String, Long> tmOut, Tuple2<String, Integer> total) throws Exception {
+                    Tuple4<String, String, String, Double> result = new Tuple4<String, String, String, Double>();
+                    result.f0 = tmOut.f0;
+                    result.f1 = tmOut.f1;
+                    result.f2 = tmOut.f2;
+                    result.f3 = tmOut.f3/(double)total.f1;
+                    return result;
+                }
+            });
+
+            trafficMatrix.writeAsCsv(outputPath + "tm", "\n", ",", WriteMode.OVERWRITE);
+            env.execute("Phase 6");
+        } else if(phase == 7) {
+            ExecutionEnvironment env = ExecutionEnvironment.getExecutionEnvironment();
+
+            DataSet<Tuple4<String, String, Integer, Integer>> loads = env.readCsvFile(outputPath + "loads")
+                    .includeFields(true, false, false, true, true, true, false)
+                    .types(String.class, String.class, Integer.class, Integer.class);
+
+            DataSet<Tuple8<String, Double, Double, String, Double, Double, String, Integer>> distance = env.readCsvFile(outputPath + "gravity")
+                    .includeFields(true, true, true, true, true, true, true, true, false, false, false)
+                    .types(String.class, Double.class, Double.class, String.class, Double.class, Double.class, String.class, Integer.class);
+
+            DataSet<Tuple5<String, String, String, Integer, Double>> distanceReduced = distance
+                    .map(new MapFunction<Tuple8<String, Double, Double, String, Double, Double, String, Integer>, Tuple5<String, String, String, Integer, Double>>() {
+                        @Override
+                        public Tuple5<String, String, String, Integer, Double> map(Tuple8<String, Double, Double, String, Double, Double, String, Integer> distance) throws Exception {
+                            Tuple5<String, String, String, Integer, Double> result =
+                            new Tuple5<String, String, String, Integer, Double>
+                            (distance.f0, distance.f3, distance.f6, distance.f7, dist(distance.f1, distance.f2, distance.f4, distance.f5));
+                            return result;
+                        }
+                    });
+
+            DataSet<Tuple4<String, String, Integer, Integer>> agg = loads.groupBy(0, 1).sum(2).andSum(3);
+
+            agg.writeAsCsv(outputPath + "agg", "\n", ",", WriteMode.OVERWRITE).setParallelism(1);
+
+            DataSet<Tuple3<String, String, Integer>> outgoing = agg.groupBy(0,1).sum(2).project(0,1,2);
+            DataSet<Tuple3<String, String, Integer>> incoming = agg.groupBy(0,1).sum(3).project(0,1,3);
+
+            DataSet<Tuple4<String, String, String, Long>> trafficMatrixIn = distanceReduced.join(incoming, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where(0,2).equalTo(0,1)
+                    .with(new JoinFunction<Tuple5<String, String, String, Integer, Double>, Tuple3<String, String, Integer>, Tuple4<String, String, String, Long>>() {
+                        @Override
+                        public Tuple4<String, String, String, Long> join(Tuple5<String, String, String, Integer, Double> distance, Tuple3<String, String, Integer> incoming) throws Exception {
+                            Tuple4<String, String, String, Long> result = new Tuple4<String, String, String, Long>();
+                            result.f0 = distance.f0;
+                            result.f1 = distance.f1;
+                            result.f2 = distance.f2;
+                            result.f3 = (long) incoming.f2;
+                            return result;
+                        }
+                    });
+
+            DataSet<Tuple4<String, String, String, Long>> trafficMatrixOut = trafficMatrixIn.join(outgoing, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where(1,2).equalTo(0,1)
+                    .with(new JoinFunction<Tuple4<String, String, String, Long>, Tuple3<String, String, Integer>, Tuple4<String, String, String, Long>>() {
+                        @Override
+                        public Tuple4<String, String, String, Long> join(Tuple4<String, String, String, Long> tmIn, Tuple3<String, String, Integer> outgoing) throws Exception {
+                            Tuple4<String, String, String, Long> result = new Tuple4<String, String, String, Long>();
+                            result.f0 = tmIn.f0;
+                            result.f1 = tmIn.f1;
+                            result.f2 = tmIn.f2;
+                            result.f3 = tmIn.f3 * (long) outgoing.f2;
+                            return result;
+                        }
+                    });
+
+            DataSet<Tuple6<String, String, String, Long, Integer, Double>> trafficMatrix = trafficMatrixOut.join(distanceReduced, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where(0,1,2).equalTo(0,1,2)
+                    .with(new JoinFunction<Tuple4<String, String, String, Long>, Tuple5<String, String, String, Integer, Double>, Tuple6<String, String, String, Long, Integer, Double>>() {
+                        @Override
+                        public Tuple6<String, String, String, Long, Integer, Double> join(Tuple4<String, String, String, Long> tmOut, Tuple5<String, String, String, Integer, Double> distance) throws Exception {
+                            Tuple6<String, String, String, Long, Integer, Double> result = new Tuple6<String, String, String, Long, Integer, Double>();
+                            result.f0 = tmOut.f0;
+                            result.f1 = tmOut.f1;
+                            result.f2 = tmOut.f2;
+                            result.f3 = tmOut.f3;
+                            result.f4 = distance.f3;
+                            result.f5 = distance.f4;
+                            return result;
+                        }
+                    });
+
+
+            trafficMatrix.writeAsCsv(outputPath + "tm", "\n", ",", WriteMode.OVERWRITE).setParallelism(1);
+            env.execute("Phase 7");
+        } else if(phase == 8) {
+            final long WAITING_FACTOR = 1L;
+
+            ExecutionEnvironment env = ExecutionEnvironment.getExecutionEnvironment();
+
+            DataSet<Flight> nonStopConnections = env.readFile(new FlightOutput.NonStopFullInputFormat(), outputPath + "oneFull");
+            DataSet<Tuple2<Flight, Flight>> twoLegConnections = env.readFile(new FlightOutput.TwoLegFullInputFormat(), outputPath + "twoFull");
+            DataSet<Tuple3<Flight, Flight, Flight>> threeLegConnections = env.readFile(new FlightOutput.ThreeLegFullInputFormat(), outputPath + "threeFull");
+
+            DataSet<Tuple10<String,String, Double, Double, String, String, Double, Double, String, Integer>> nonStop = nonStopConnections.map(new MapFunction<Flight, Tuple10<String, String, Double, Double, String, String, Double, Double, String, Integer>>() {
+                SimpleDateFormat format = new SimpleDateFormat("ddMMyyyy");
+
+                @Override
+                public Tuple10<String, String, Double, Double, String, String, Double, Double, String, Integer> map(Flight value) throws Exception {
+                    Date date = new Date(value.getDepartureTimestamp());
+                    String dayString = format.format(date);
+                    long duration = value.getArrivalTimestamp() - value.getDepartureTimestamp();
+                    if(duration <= 0L)
+                        throw new Exception("Value error: " + value.toString());
+                    Integer minutes = (int) (duration / (60L * 1000L));
+                    return new Tuple10<String, String, Double, Double, String, String, Double, Double, String, Integer>
+                            (value.getOriginAirport(), value.getOriginCountry(), value.getOriginLatitude(), value.getOriginLongitude(),
+                             value.getDestinationAirport(), value.getDestinationAirport(), value.getDestinationLatitude(), value.getDestinationLongitude(), dayString, minutes);
+                }
+            });
+
+            DataSet<Tuple10<String,String, Double, Double, String, String, Double, Double, String, Integer>> twoLeg = twoLegConnections.map(new MapFunction<Tuple2<Flight, Flight>, Tuple10<String,String, Double, Double, String, String, Double, Double, String, Integer>>() {
+                SimpleDateFormat format = new SimpleDateFormat("ddMMyyyy");
+
+                @Override
+                public Tuple10<String,String, Double, Double, String, String, Double, Double, String, Integer> map(Tuple2<Flight, Flight> value) throws Exception {
+                    Date date = new Date(value.f0.getDepartureTimestamp());
+                    String dayString = format.format(date);
+                    long flight1 = value.f0.getArrivalTimestamp() - value.f0.getDepartureTimestamp();
+                    long wait1 = WAITING_FACTOR * (value.f1.getDepartureTimestamp() - value.f0.getArrivalTimestamp());
+                    long flight2 = value.f1.getArrivalTimestamp() - value.f1.getDepartureTimestamp();
+                    long duration = flight1 + wait1 + flight2;
+                    if(duration <= 0L)
+                        throw new Exception("Value error: " + value.toString());
+                    Integer minutes = (int) (duration / (60L * 1000L));
+                    return new Tuple10<String,String, Double, Double, String, String, Double, Double, String, Integer>
+                            (value.f0.getOriginAirport(), value.f0.getOriginCountry(), value.f0.getOriginLatitude(), value.f0.getOriginLongitude(),
+                             value.f1.getDestinationAirport(), value.f1.getDestinationCountry(), value.f1.getDestinationLatitude(), value.f1.getDestinationLongitude(), dayString, minutes);
+                }
+            });
+
+            DataSet<Tuple10<String,String, Double, Double, String, String, Double, Double, String, Integer>> threeLeg = threeLegConnections.map(new MapFunction<Tuple3<Flight, Flight, Flight>, Tuple10<String,String, Double, Double, String, String, Double, Double, String, Integer>>() {
+                SimpleDateFormat format = new SimpleDateFormat("ddMMyyyy");
+
+                @Override
+                public Tuple10<String,String, Double, Double, String, String, Double, Double, String, Integer> map(Tuple3<Flight, Flight, Flight> value) throws Exception {
+                    Date date = new Date(value.f0.getDepartureTimestamp());
+                    String dayString = format.format(date);
+                    long flight1 = value.f0.getArrivalTimestamp() - value.f0.getDepartureTimestamp();
+                    long wait1 = WAITING_FACTOR * (value.f1.getDepartureTimestamp() - value.f0.getArrivalTimestamp());
+                    long flight2 = value.f1.getArrivalTimestamp() - value.f1.getDepartureTimestamp();
+                    long wait2 = WAITING_FACTOR * (value.f2.getDepartureTimestamp() - value.f1.getArrivalTimestamp());
+                    long flight3 = value.f2.getArrivalTimestamp() - value.f2.getDepartureTimestamp();
+                    long duration = flight1 + wait1 + flight2 + wait2 + flight3;
+                    if(duration <= 0L)
+                        throw new Exception("Value error: " + value.toString());
+                    Integer minutes = (int) (duration / (60L * 1000L));
+                    return new Tuple10<String,String, Double, Double, String, String, Double, Double, String, Integer>
+                            (value.f0.getOriginAirport(), value.f0.getOriginCountry(), value.f0.getOriginLatitude(), value.f0.getOriginLongitude(),
+                             value.f2.getDestinationAirport(), value.f2.getDestinationCountry(), value.f2.getDestinationLatitude(), value.f2.getDestinationLongitude(), dayString, minutes);
+                }
+            });
+
+            DataSet<Tuple10<String,String, Double, Double, String, String, Double, Double, String, Integer>> flights = nonStop.union(twoLeg).union(threeLeg);
+            DataSet<Tuple10<String, String, String, String, String, Integer, Integer, Double, Integer, Double>> result = flights.groupBy(0, 1, 2, 3, 4, 5, 6, 7, 8).reduceGroup(new GroupReduceFunction<Tuple10<String,String, Double, Double, String, String, Double, Double, String, Integer>, Tuple10<String, String, String, String, String, Integer, Integer, Double, Integer, Double>>() {
+                @Override
+                public void reduce(Iterable<Tuple10<String,String, Double, Double, String, String, Double, Double, String, Integer>> values, Collector<Tuple10<String, String, String, String, String, Integer, Integer, Double, Integer, Double>> out) throws Exception {
+                    Tuple10<String, String, String, String, String, Integer, Integer, Double, Integer, Double> result =
+                            new Tuple10<String, String, String, String, String, Integer, Integer, Double, Integer, Double>();
+                    int min = Integer.MAX_VALUE;
+                    int max = Integer.MIN_VALUE;
+                    int sum = 0;
+                    int count = 0;
+                    boolean first = true;
+                    for (Tuple10<String,String, Double, Double, String, String, Double, Double, String, Integer> t : values) {
+                        if (first) {
+                            result.f0 = t.f0;
+                            result.f1 = t.f1;
+                            result.f2 = t.f4;
+                            result.f3 = t.f5;
+                            result.f4 = t.f8;
+                            result.f9 = dist(t.f2, t.f3, t.f6, t.f7);
+                            first = false;
+                        }
+                        int minutes = t.f9;
+                        sum += minutes;
+                        count++;
+                        if (minutes < min) {
+                            min = minutes;
+                        }
+                        if (minutes > max) {
+                            max = minutes;
+                        }
+                    }
+                    Double avg = (double) sum / (double) count;
+                    result.f5 = min;
+                    result.f6 = max;
+                    result.f7 = avg;
+                    result.f8 = count;
+                    out.collect(result);
+                }
+            });
+
+            result.writeAsCsv(outputPath + "gravity2", "\n", ",", WriteMode.OVERWRITE).setParallelism(1);
+
+            DataSet<Tuple5<String, String, Integer, Integer, String>> loads = env.readCsvFile(outputPath + "loads")
+                    .includeFields(true, false, false, true, true, true, true)
+                    .types(String.class, String.class, Integer.class, Integer.class, String.class);
+
+            loads.writeAsCsv(outputPath + "loadsF").setParallelism(1);
+
+            env.execute("Phase 8");
         } else {
             throw new Exception("Invalid parameter! phase: " + phase);
         }
