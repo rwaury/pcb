@@ -2,7 +2,6 @@ package com.amadeus.pcb.join;
 
 import org.apache.flink.api.common.functions.*;
 import org.apache.flink.api.common.io.FileOutputFormat;
-import org.apache.flink.api.common.operators.Order;
 import org.apache.flink.api.common.operators.base.JoinOperatorBase;
 import org.apache.flink.api.java.DataSet;
 import org.apache.flink.api.java.ExecutionEnvironment;
@@ -1988,7 +1987,7 @@ public class FlightConnectionJoiner {
                     Integer minutes = (int) (duration / (60L * 1000L));
                     return new Tuple10<String, String, Double, Double, String, String, Double, Double, String, Integer>
                             (value.getOriginAirport(), value.getOriginCountry(), value.getOriginLatitude(), value.getOriginLongitude(),
-                             value.getDestinationAirport(), value.getDestinationAirport(), value.getDestinationLatitude(), value.getDestinationLongitude(), dayString, minutes);
+                             value.getDestinationAirport(), value.getDestinationCountry(), value.getDestinationLatitude(), value.getDestinationLongitude(), dayString, minutes);
                 }
             });
 
@@ -2080,7 +2079,7 @@ public class FlightConnectionJoiner {
                     .includeFields(true, false, false, true, true, true, true)
                     .types(String.class, String.class, Integer.class, Integer.class, String.class);
 
-            loads.writeAsCsv(outputPath + "loadsF").setParallelism(1);
+            loads.writeAsCsv(outputPath + "loadsF", "\n", ",", WriteMode.OVERWRITE).setParallelism(1);
 
             env.execute("Phase 8");
         } else {
