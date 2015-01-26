@@ -16,7 +16,7 @@ public class TrafficAnalysis {
 
     private static final double WAITING_FACTOR = 1.0;
 
-    private static final int MAX_ITERATIONS = 25;
+    private static final int MAX_ITERATIONS = 10;
 
     private static String outputPath = "hdfs:///user/rwaury/output/flights/";
 
@@ -209,7 +209,21 @@ public class TrafficAnalysis {
 
         DataSet<Tuple5<String, String, String, Boolean, Double>> trafficMatrix = distances.join(result.filter(new OutgoingFilter())).where(0,2,3).equalTo(0,1,2).with(new TMJoinerOut()).join(result.filter(new IncomingFilter())).where(1,2,3).equalTo(0,1,2).with(new TMJoinerIn());
 
-        trafficMatrix.project(0,1,2,4).groupBy(2).sortGroup(3, Order.DESCENDING).first(100).writeAsCsv(outputPath + "trafficMatrix", "\n", ",", FileSystem.WriteMode.OVERWRITE);
+        trafficMatrix.project(0,1,2,4)/*.groupBy(2).sortGroup(3, Order.DESCENDING).first(100)*/.writeAsCsv(outputPath + "trafficMatrix", "\n", ",", FileSystem.WriteMode.OVERWRITE);
+
+        /*
+        DataSet<Itinerary> nonStopItineraries = env.readFile(new FlightOutput.NonStopFullInputFormat(), outputPath + "oneFull").map(new FlightExtractor1());
+        DataSet<Itinerary> twoLegItineraries = env.readFile(new FlightOutput.TwoLegFullInputFormat(), outputPath + "twoFull").map(new FlightExtractor2());
+        DataSet<Itinerary> threeLegItineraries = env.readFile(new FlightOutput.ThreeLegFullInputFormat(), outputPath + "threeFull").map(new FlightExtractor3());
+
+        DataSet<Itinerary> itineraries = nonStopItineraries.union(twoLegItineraries).union(threeLegItineraries);
+
+        itineraries.filter(new FilterFunction<Itinerary>() {
+            @Override
+            public boolean filter(Itinerary itinerary) throws Exception {
+                return itinerary.f2.equals("06052014");
+            }
+        }).writeAsCsv(outputPath + "itineraries", "\n", ",", FileSystem.WriteMode.OVERWRITE);*/
 
         env.execute("TrafficAnalysis");
     }
