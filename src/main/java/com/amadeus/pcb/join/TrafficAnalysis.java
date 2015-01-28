@@ -1,7 +1,10 @@
 package com.amadeus.pcb.join;
 
+import cc.mallet.optimize.LimitedMemoryBFGS;
+import cc.mallet.optimize.OptimizationException;
 import org.apache.flink.api.common.functions.*;
 import org.apache.flink.api.common.operators.Order;
+import org.apache.flink.api.common.operators.base.JoinOperatorBase;
 import org.apache.flink.api.java.DataSet;
 import org.apache.flink.api.java.ExecutionEnvironment;
 import org.apache.flink.api.java.operators.IterativeDataSet;
@@ -9,14 +12,21 @@ import org.apache.flink.api.java.tuple.*;
 import org.apache.flink.core.fs.FileSystem;
 import org.apache.flink.util.Collector;
 
+import javax.xml.crypto.Data;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Date;
+import java.util.Iterator;
 
 public class TrafficAnalysis {
 
     private static final double WAITING_FACTOR = 1.0;
 
     private static final int MAX_ITERATIONS = 10;
+
+    private static final double OPTIMIZER_TOLERANCE = 0.000001;
+
+    private static final int MAX_OPTIMIZER_ITERATIONS = 1000;
 
     private static String outputPath = "hdfs:///user/rwaury/output/flights/";
 
@@ -211,19 +221,28 @@ public class TrafficAnalysis {
 
         trafficMatrix.project(0,1,2,4)/*.groupBy(2).sortGroup(3, Order.DESCENDING).first(100)*/.writeAsCsv(outputPath + "trafficMatrix", "\n", ",", FileSystem.WriteMode.OVERWRITE);
 
-        /*
         DataSet<Itinerary> nonStopItineraries = env.readFile(new FlightOutput.NonStopFullInputFormat(), outputPath + "oneFull").map(new FlightExtractor1());
         DataSet<Itinerary> twoLegItineraries = env.readFile(new FlightOutput.TwoLegFullInputFormat(), outputPath + "twoFull").map(new FlightExtractor2());
         DataSet<Itinerary> threeLegItineraries = env.readFile(new FlightOutput.ThreeLegFullInputFormat(), outputPath + "threeFull").map(new FlightExtractor3());
 
         DataSet<Itinerary> itineraries = nonStopItineraries.union(twoLegItineraries).union(threeLegItineraries);
 
-        itineraries.filter(new FilterFunction<Itinerary>() {
+        /*itineraries.filter(new FilterFunction<Itinerary>() {
             @Override
             public boolean filter(Itinerary itinerary) throws Exception {
                 return itinerary.f2.equals("06052014");
             }
         }).writeAsCsv(outputPath + "itineraries", "\n", ",", FileSystem.WriteMode.OVERWRITE);*/
+
+        DataSet<Itinerary> midt = env.readTextFile(outputPath + "MIDT/MIDTTotalHits.csv").flatMap(new MIDTParser()).groupBy(0,1,2,3,4,5,6).reduceGroup(new MIDTGrouper());
+        DataSet<Tuple4<String, String, String, LogitOptimizable>> trainedLogit = midt.groupBy(0,1,2).reduceGroup(new LogitTrainer());
+        trainedLogit.writeAsCsv(outputPath + "logitResult", "\n", ",", FileSystem.WriteMode.OVERWRITE);
+
+        DataSet<Tuple5<String, String, String, Double, LogitOptimizable>> TMWithWeights = trafficMatrix.join(trainedLogit, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where(0,1,2).equalTo(0,1,2).with(new WeightTMJoiner());
+
+        DataSet<Tuple7<String, String, String, String, String, String, Long>> estimate = itineraries.coGroup(TMWithWeights).where(0,1,2).equalTo(0,1,2).with(new TrafficEstimator());
+
+        estimate.writeAsCsv(outputPath + "ItineraryEstimate", "\n", ",", FileSystem.WriteMode.OVERWRITE);
 
         env.execute("TrafficAnalysis");
     }
@@ -279,8 +298,8 @@ public class TrafficAnalysis {
             String dayString = format.format(date);
             Double distance = dist(flight.getOriginLatitude(), flight.getOriginLongitude(), flight.getDestinationLatitude(), flight.getDestinationLongitude());
             Integer travelTime = (int) ((flight.getArrivalTimestamp() - flight.getDepartureTimestamp())/(60L*1000L));
-            return new Itinerary(flight.getOriginAirport(), flight.getDestinationAirport(), dayString, flight.getDepartureTimestamp(),
-                    flight.getAirline() + flight.getFlightNumber(), "", "", distance, distance, travelTime, 0, flight.getLegCount(), flight.getMaxCapacity());
+            return new Itinerary(flight.getOriginAirport(), flight.getDestinationAirport(), dayString,
+                    flight.getAirline() + flight.getFlightNumber(), "", "", "", distance, distance, travelTime, 0, flight.getLegCount(), flight.getMaxCapacity(), 0);
         }
     }
 
@@ -297,9 +316,9 @@ public class TrafficAnalysis {
             Integer waitingTime = (int) ((flight.f1.getDepartureTimestamp() - flight.f0.getArrivalTimestamp())/(60L*1000L));
             Integer legCount = flight.f0.getLegCount() + flight.f1.getLegCount();
             Integer maxCapacity = Math.min(flight.f0.getMaxCapacity(), flight.f1.getMaxCapacity());
-            return new Itinerary(flight.f0.getOriginAirport(), flight.f1.getDestinationAirport(), dayString, flight.f0.getDepartureTimestamp(),
-                    flight.f0.getAirline() + flight.f0.getFlightNumber(), flight.f1.getAirline() + flight.f1.getFlightNumber(), "",
-                    directDistance, travelledDistance, travelTime, waitingTime, legCount, maxCapacity);
+            return new Itinerary(flight.f0.getOriginAirport(), flight.f1.getDestinationAirport(), dayString,
+                    flight.f0.getAirline() + flight.f0.getFlightNumber(), flight.f1.getAirline() + flight.f1.getFlightNumber(), "", "",
+                    directDistance, travelledDistance, travelTime, waitingTime, legCount, maxCapacity, 0);
         }
     }
 
@@ -320,9 +339,175 @@ public class TrafficAnalysis {
                     (60L*1000L));
             Integer legCount = flight.f0.getLegCount() + flight.f1.getLegCount() + flight.f2.getLegCount();
             Integer maxCapacity = Math.min(flight.f0.getMaxCapacity(), Math.min(flight.f1.getMaxCapacity(), flight.f2.getMaxCapacity()));
-            return new Itinerary(flight.f0.getOriginAirport(), flight.f2.getDestinationAirport(), dayString, flight.f0.getDepartureTimestamp(),
-                    flight.f0.getAirline() + flight.f0.getFlightNumber(), flight.f1.getAirline() + flight.f1.getFlightNumber(), flight.f2.getAirline() + flight.f2.getFlightNumber(),
-                    directDistance, travelledDistance, travelTime, waitingTime, legCount, maxCapacity);
+            return new Itinerary(flight.f0.getOriginAirport(), flight.f2.getDestinationAirport(), dayString,
+                    flight.f0.getAirline() + flight.f0.getFlightNumber(), flight.f1.getAirline() + flight.f1.getFlightNumber(), flight.f2.getAirline() + flight.f2.getFlightNumber(), "",
+                    directDistance, travelledDistance, travelTime, waitingTime, legCount, maxCapacity, 0);
+        }
+    }
+
+    private static class MIDTParser implements FlatMapFunction<String, Itinerary> {
+
+        SimpleDateFormat format = new SimpleDateFormat("ddMMyyyy");
+        private static long firstPossibleTimestamp = 1399248000000L;
+
+        @Override
+        public void flatMap(String s, Collector<Itinerary> out) throws Exception {
+            if(s.startsWith("$")) {
+                return;
+            }
+            String[] tmp = s.split(";");
+            if(tmp.length < 15) {
+                return;
+            }
+            //int legsInEntry = (tmp.length-(6+1))/9;
+            String origin = tmp[0].trim();
+            String destination = tmp[1].trim();
+            int pax = Integer.parseInt(tmp[2].trim());
+            int segmentCount = Integer.parseInt(tmp[3].trim());
+            String flight1 = tmp[9].trim() + tmp[10].trim();
+            String flight2 = "";
+            String flight3 = "";
+            String flight4 = "";
+            int departure = Integer.parseInt(tmp[12].trim());
+            int arrival = Integer.parseInt(tmp[14].trim());
+            int waitingTime = 0;
+            int tmpDep = 0;
+            if(segmentCount > 1) {
+                flight2 = tmp[18].trim() + tmp[19].trim();
+                tmpDep = Integer.parseInt(tmp[21].trim());
+                waitingTime += tmpDep - arrival;
+                arrival = Integer.parseInt(tmp[23].trim());
+            }
+            if(segmentCount > 2) {
+                flight3 = tmp[27].trim() + tmp[28].trim();
+                tmpDep = Integer.parseInt(tmp[30].trim());
+                waitingTime += tmpDep - arrival;
+                arrival = Integer.parseInt(tmp[32].trim());
+            }
+            if(segmentCount > 3) {
+                flight4 = tmp[36].trim() + tmp[37].trim();
+                tmpDep = Integer.parseInt(tmp[39].trim());
+                waitingTime += tmpDep - arrival;
+                arrival = Integer.parseInt(tmp[41].trim());
+            }
+            int travelTime = arrival - departure;
+            long departureTimestamp = firstPossibleTimestamp + (departure*60L*1000L);
+            Date date = new Date(departureTimestamp);
+            String dayString = format.format(date);
+            Itinerary result = new Itinerary(origin, destination, dayString,
+                    flight1, flight2, flight3, flight4, 0.0, 0.0, travelTime, waitingTime,
+                    segmentCount, 0, pax);
+            out.collect(result);
+        }
+    }
+
+    private static class MIDTGrouper implements GroupReduceFunction<Itinerary, Itinerary> {
+
+        @Override
+        public void reduce(Iterable<Itinerary> midts, Collector<Itinerary> out) throws Exception {
+            int paxSum = 0;
+            Iterator<Itinerary> iterator = midts.iterator();
+            Itinerary midt = null;
+            while(iterator.hasNext()) {
+                midt = iterator.next();
+                paxSum += midt.f13;
+            }
+            midt.f13 = paxSum;
+            out.collect(midt);
+        }
+    }
+
+    private static class LogitTrainer implements GroupReduceFunction<Itinerary, Tuple4<String, String, String, LogitOptimizable>> {
+
+        @Override
+        public void reduce(Iterable<Itinerary> itineraries, Collector<Tuple4<String, String, String, LogitOptimizable>> out) throws Exception {
+            ArrayList<LogitOptimizable.TrainingData> trainingData = new ArrayList<LogitOptimizable.TrainingData>();
+            Iterator<Itinerary> iterator = itineraries.iterator();
+            Itinerary itin = null;
+            int minTravelTime = Integer.MAX_VALUE;
+            while(iterator.hasNext()) {
+                itin = iterator.next();
+                if(itin.f10 < minTravelTime) {
+                    minTravelTime = itin.f10;
+                }
+                double percentageWaiting = (itin.f10 == 0 || itin.f9 == 0) ? 0 : itin.f10/itin.f9;
+                trainingData.add(new LogitOptimizable.TrainingData(itin.f10, percentageWaiting, itin.f12, itin.f13));
+            }
+            if(trainingData.size() < 2) {
+                return;
+            }
+            LogitOptimizable optimizable = new LogitOptimizable();
+            if(minTravelTime < 1) {
+                minTravelTime = 1;
+            }
+            optimizable.setTrainingData(trainingData, minTravelTime);
+            LimitedMemoryBFGS optimizer = new LimitedMemoryBFGS(optimizable);
+            optimizer.setTolerance(OPTIMIZER_TOLERANCE);
+            boolean converged = false;
+            try {
+                converged = optimizer.optimize(MAX_OPTIMIZER_ITERATIONS);
+            } catch (IllegalArgumentException e) {
+                // This exception may be thrown if L-BFGS
+                // cannot step in the current direction.
+                // This condition does not necessarily mean that
+                // the optimizer has failed, but it doesn't want
+                // to claim to have succeeded...
+            } catch (OptimizationException o) {
+            } catch (Throwable t) {
+                throw new Exception("Something went wrong in the optimizer. " + t.getMessage());
+            }
+            optimizable.clear();
+            out.collect(new Tuple4<String, String, String, LogitOptimizable>(itin.f0, itin.f1, itin.f2, optimizable));
+        }
+    }
+
+    private static class WeightTMJoiner implements JoinFunction<Tuple5<String, String, String, Boolean, Double>, Tuple4<String, String, String, LogitOptimizable>,
+            Tuple5<String, String, String, Double, LogitOptimizable>> {
+
+        @Override
+        public Tuple5<String, String, String, Double, LogitOptimizable> join(Tuple5<String, String, String, Boolean, Double> tmEntry, Tuple4<String, String, String, LogitOptimizable> logit) throws Exception {
+            return new Tuple5<String, String, String, Double, LogitOptimizable>(tmEntry.f0, tmEntry.f1, tmEntry.f2, tmEntry.f4, logit.f3);
+        }
+    }
+
+    private static class TrafficEstimator implements CoGroupFunction<Itinerary, Tuple5<String, String, String, Double, LogitOptimizable>,
+            Tuple7<String, String, String, String, String, String, Long>> {
+
+        @Override
+        public void coGroup(Iterable<Itinerary> connections, Iterable<Tuple5<String, String, String, Double, LogitOptimizable>> logitModel,
+                            Collector<Tuple7<String, String, String, String, String, String, Long>> out) throws Exception {
+            Iterator<Tuple5<String, String, String, Double, LogitOptimizable>> logitIter = logitModel.iterator();
+            if(!logitIter.hasNext()) {
+                return;
+            }
+            Tuple5<String, String, String, Double, LogitOptimizable> tuple = logitIter.next();
+            double estimate = tuple.f3;
+            double[] weights = tuple.f4.asArray();
+            Iterator<Itinerary> iter = connections.iterator();
+            if(!iter.hasNext()) {
+                return;
+            }
+            ArrayList<Itinerary> itineraries = new ArrayList<Itinerary>();
+            int minTime = Integer.MAX_VALUE;
+            while (iter.hasNext()) {
+                Itinerary e = iter.next();
+                itineraries.add(e);
+                if(e.f9 < minTime) {
+                    minTime = e.f9;
+                }
+            }
+            double softmaxSum = 0.0;
+            for(Itinerary e : itineraries) {
+                softmaxSum += Math.exp(LogitOptimizable.linearPredictorFunction(LogitOptimizable.toArray(e, minTime), weights));
+            }
+            for(Itinerary e : itineraries) {
+                double itineraryEstimate = LogitOptimizable.softmax(e, softmaxSum, weights, minTime)*estimate;
+                long roundedEstimate = Math.round(itineraryEstimate);
+                if(roundedEstimate > 0L) {
+                    out.collect(new Tuple7<String, String, String, String, String, String, Long>(e.f0, e.f1, e.f2, e.f3, e.f4, e.f5, roundedEstimate));
+                }
+            }
+
         }
     }
 
@@ -345,4 +530,5 @@ public class TrafficAnalysis {
     private static double decayingFunction(double distance) {
         return 1.0/Math.sqrt(distance);
     }
+
 }
