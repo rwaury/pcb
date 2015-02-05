@@ -2,6 +2,7 @@ package com.amadeus.pcb.join;
 
 import cc.mallet.optimize.LimitedMemoryBFGS;
 import cc.mallet.optimize.OptimizationException;
+import net.didion.jwnl.data.Exc;
 import org.apache.flink.api.common.functions.*;
 import org.apache.flink.api.common.operators.Order;
 import org.apache.flink.api.common.operators.base.JoinOperatorBase;
@@ -12,13 +13,15 @@ import org.apache.flink.api.java.tuple.*;
 import org.apache.flink.core.fs.FileSystem;
 import org.apache.flink.util.Collector;
 
-import javax.xml.crypto.Data;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.HashSet;
 import java.util.Iterator;
 
 public class TrafficAnalysis {
+
+    private static final double SLF = 0.8;
 
     private static final double WAITING_FACTOR = 1.0;
 
@@ -28,7 +31,10 @@ public class TrafficAnalysis {
 
     private static final int MAX_OPTIMIZER_ITERATIONS = 1000;
 
-    private static String outputPath = "hdfs:///user/rwaury/output/flights/";
+    private static long firstPossibleTimestamp = 1399248000000L;
+    private static long lastPossibleTimestamp = 1399334399000L;
+
+    private static String outputPath = "hdfs:///user/rwaury/output2/flights/";
 
     public static void main(String[] args) throws Exception {
         ExecutionEnvironment env = ExecutionEnvironment.getExecutionEnvironment();
@@ -43,13 +49,18 @@ public class TrafficAnalysis {
                 if(flight.getLegCount() > 1) {
                     return;
                 }
+                if(flight.getDepartureTimestamp() > lastPossibleTimestamp || flight.getDepartureTimestamp() < firstPossibleTimestamp) {
+                    return;
+                }
                 Date date = new Date(flight.getDepartureTimestamp());
                 String dayString = format.format(date);
                 boolean isInternational = !flight.getOriginCountry().equals(flight.getDestinationCountry());
+                int roundedCapacity = (int)Math.round((SLF*flight.getMaxCapacity()));
+                int capacity = (roundedCapacity > 0) ? roundedCapacity : 1;
                 Tuple5<String, String, Boolean, Integer, Integer> outgoing = new Tuple5<String, String, Boolean, Integer, Integer>
-                        (flight.getOriginAirport(), dayString, isInternational, flight.getMaxCapacity(), 0);
+                        (flight.getOriginAirport(), dayString, isInternational, capacity, 0);
                 Tuple5<String, String, Boolean, Integer, Integer> incoming = new Tuple5<String, String, Boolean, Integer, Integer>
-                        (flight.getDestinationAirport(), dayString, isInternational, 0, flight.getMaxCapacity());
+                        (flight.getDestinationAirport(), dayString, isInternational, 0, capacity);
                 out.collect(incoming);
                 out.collect(outgoing);
             }
@@ -103,29 +114,33 @@ public class TrafficAnalysis {
         DataSet<Tuple2<Flight, Flight>> twoLegConnections = env.readFile(new FlightOutput.TwoLegFullInputFormat(), outputPath + "twoFull");
         DataSet<Tuple3<Flight, Flight, Flight>> threeLegConnections = env.readFile(new FlightOutput.ThreeLegFullInputFormat(), outputPath + "threeFull");
 
-        DataSet<Tuple6<String, String, Boolean, Double, String, Integer>> nonStop = nonStopConnections.map(new MapFunction<Flight, Tuple6<String, String, Boolean, Double, String, Integer>>() {
+        DataSet<Tuple6<String, String, Boolean, String, Double, Integer>> nonStop = nonStopConnections.flatMap(new FlatMapFunction<Flight, Tuple6<String, String, Boolean, String, Double, Integer>>() {
             SimpleDateFormat format = new SimpleDateFormat("ddMMyyyy");
-
             @Override
-            public Tuple6<String, String, Boolean, Double, String, Integer> map(Flight value) throws Exception {
+            public void flatMap(Flight value, Collector<Tuple6<String, String, Boolean, String, Double, Integer>> out) throws Exception {
+                if(value.getDepartureTimestamp() > lastPossibleTimestamp || value.getDepartureTimestamp() < firstPossibleTimestamp) {
+                    return;
+                }
                 Date date = new Date(value.getDepartureTimestamp());
                 String dayString = format.format(date);
                 long duration = value.getArrivalTimestamp() - value.getDepartureTimestamp();
-                if(duration <= 0L)
+                if (duration <= 0L)
                     throw new Exception("Value error: " + value.toString());
                 Integer minutes = (int) (duration / (60L * 1000L));
                 boolean isInternational = !value.getOriginCountry().equals(value.getDestinationCountry());
-                return new Tuple6<String, String, Boolean, Double, String, Integer>
-                (value.getOriginAirport(), value.getDestinationAirport(), isInternational,
-                dist(value.getOriginLatitude(), value.getOriginLongitude(), value.getDestinationLatitude(), value.getDestinationLongitude()), dayString, minutes);
+                out.collect(new Tuple6<String, String, Boolean, String, Double, Integer>
+                        (value.getOriginAirport(), value.getDestinationAirport(), isInternational, dayString,
+                                dist(value.getOriginLatitude(), value.getOriginLongitude(), value.getDestinationLatitude(), value.getDestinationLongitude()), minutes));
             }
         });
 
-        DataSet<Tuple6<String, String, Boolean, Double, String, Integer>> twoLeg = twoLegConnections.map(new MapFunction<Tuple2<Flight, Flight>, Tuple6<String, String, Boolean, Double, String, Integer>>() {
+        DataSet<Tuple6<String, String, Boolean, String, Double, Integer>> twoLeg = twoLegConnections.flatMap(new FlatMapFunction<Tuple2<Flight, Flight>, Tuple6<String, String, Boolean, String, Double, Integer>>() {
             SimpleDateFormat format = new SimpleDateFormat("ddMMyyyy");
-
             @Override
-            public Tuple6<String, String, Boolean, Double, String, Integer> map(Tuple2<Flight, Flight> value) throws Exception {
+            public void flatMap(Tuple2<Flight, Flight> value, Collector<Tuple6<String, String, Boolean, String, Double, Integer>> out) throws Exception {
+                if(value.f0.getDepartureTimestamp() > lastPossibleTimestamp || value.f0.getDepartureTimestamp() < firstPossibleTimestamp) {
+                    return;
+                }
                 Date date = new Date(value.f0.getDepartureTimestamp());
                 String dayString = format.format(date);
                 long flight1 = value.f0.getArrivalTimestamp() - value.f0.getDepartureTimestamp();
@@ -136,95 +151,105 @@ public class TrafficAnalysis {
                     throw new Exception("Value error: " + value.toString());
                 Integer minutes = (int) (duration / (60L * 1000L));
                 boolean isInternational = !value.f0.getOriginCountry().equals(value.f1.getDestinationCountry());
-                return new Tuple6<String, String, Boolean, Double, String, Integer>
-                (value.f0.getOriginAirport(), value.f1.getDestinationAirport(), isInternational,
-                dist(value.f0.getOriginLatitude(), value.f0.getOriginLongitude(), value.f1.getDestinationLatitude(), value.f1.getDestinationLongitude()), dayString, minutes);
+                out.collect(new Tuple6<String, String, Boolean, String, Double, Integer>
+                        (value.f0.getOriginAirport(), value.f1.getDestinationAirport(), isInternational, dayString,
+                                dist(value.f0.getOriginLatitude(), value.f0.getOriginLongitude(), value.f1.getDestinationLatitude(), value.f1.getDestinationLongitude()), minutes));
             }
         });
 
-        DataSet<Tuple6<String, String, Boolean, Double, String, Integer>> threeLeg = threeLegConnections.map(new MapFunction<Tuple3<Flight, Flight, Flight>, Tuple6<String, String, Boolean, Double, String, Integer>>() {
+        DataSet<Tuple6<String, String, Boolean, String, Double, Integer>> threeLeg = threeLegConnections.flatMap(new FlatMapFunction<Tuple3<Flight, Flight, Flight>, Tuple6<String, String, Boolean, String, Double, Integer>>() {
             SimpleDateFormat format = new SimpleDateFormat("ddMMyyyy");
-
             @Override
-            public Tuple6<String, String, Boolean, Double, String, Integer> map(Tuple3<Flight, Flight, Flight> value) throws Exception {
+            public void flatMap(Tuple3<Flight, Flight, Flight> value, Collector<Tuple6<String, String, Boolean, String, Double, Integer>> out) throws Exception {
+                if(value.f0.getDepartureTimestamp() > lastPossibleTimestamp || value.f0.getDepartureTimestamp() < firstPossibleTimestamp) {
+                    return;
+                }
                 Date date = new Date(value.f0.getDepartureTimestamp());
                 String dayString = format.format(date);
                 long flight1 = value.f0.getArrivalTimestamp() - value.f0.getDepartureTimestamp();
-                long wait1 = (long)(WAITING_FACTOR * (value.f1.getDepartureTimestamp() - value.f0.getArrivalTimestamp()));
+                long wait1 = (long) (WAITING_FACTOR * (value.f1.getDepartureTimestamp() - value.f0.getArrivalTimestamp()));
                 long flight2 = value.f1.getArrivalTimestamp() - value.f1.getDepartureTimestamp();
-                long wait2 = (long)(WAITING_FACTOR * (value.f2.getDepartureTimestamp() - value.f1.getArrivalTimestamp()));
+                long wait2 = (long) (WAITING_FACTOR * (value.f2.getDepartureTimestamp() - value.f1.getArrivalTimestamp()));
                 long flight3 = value.f2.getArrivalTimestamp() - value.f2.getDepartureTimestamp();
                 long duration = flight1 + wait1 + flight2 + wait2 + flight3;
-                if(duration <= 0L)
+                if (duration <= 0L)
                     throw new Exception("Value error: " + value.toString());
                 Integer minutes = (int) (duration / (60L * 1000L));
                 boolean isInternational = !value.f0.getOriginCountry().equals(value.f2.getDestinationCountry());
-                return new Tuple6<String, String, Boolean, Double, String, Integer>
-                (value.f0.getOriginAirport(), value.f2.getDestinationAirport(), isInternational,
-                dist(value.f0.getOriginLatitude(), value.f0.getOriginLongitude(), value.f2.getDestinationLatitude(), value.f2.getDestinationLongitude()), dayString, minutes);
+                out.collect(new Tuple6<String, String, Boolean, String, Double, Integer>
+                        (value.f0.getOriginAirport(), value.f2.getDestinationAirport(), isInternational, dayString,
+                                dist(value.f0.getOriginLatitude(), value.f0.getOriginLongitude(), value.f2.getDestinationLatitude(), value.f2.getDestinationLongitude()), minutes));
             }
         });
 
-        DataSet<Tuple6<String, String, Boolean, Double, String, Integer>> flights = nonStop.union(twoLeg).union(threeLeg);
-        DataSet<Tuple9<String, String, String, Boolean, Double, Integer, Integer, Double, Integer>> distances = flights.groupBy(0, 1, 2, 3, 4).reduceGroup(new GroupReduceFunction<Tuple6<String, String, Boolean, Double, String, Integer>, Tuple9<String, String, String, Boolean, Double, Integer, Integer, Double, Integer>>() {
-            @Override
-            public void reduce(Iterable<Tuple6<String, String, Boolean, Double, String, Integer>> values, Collector<Tuple9<String, String, String, Boolean, Double, Integer, Integer, Double, Integer>> out) throws Exception {
-                Tuple9<String, String, String, Boolean, Double, Integer, Integer, Double, Integer> result =
-                        new Tuple9<String, String, String, Boolean, Double, Integer, Integer, Double, Integer>();
-                int min = Integer.MAX_VALUE;
-                int max = Integer.MIN_VALUE;
-                int sum = 0;
-                int count = 0;
-                boolean first = true;
-                for (Tuple6<String, String, Boolean, Double, String, Integer> t : values) {
-                    if (first) {
-                        result.f0 = t.f0;
-                        result.f1 = t.f1;
-                        result.f2 = t.f4;
-                        result.f3 = t.f2;
-                        result.f4 = t.f3;
-                        first = false;
+        DataSet<Tuple6<String, String, Boolean, String, Double, Integer>> flights = nonStop.union(twoLeg).union(threeLeg);
+        DataSet<Tuple9<String, String, String, Boolean, Double, Integer, Integer, Double, Integer>> distances = flights.groupBy(0, 1, 2, 3)
+                .reduceGroup(new GroupReduceFunction<Tuple6<String, String, Boolean, String, Double, Integer>, Tuple9<String, String, String, Boolean, Double, Integer, Integer, Double, Integer>>() {
+                    @Override
+                    public void reduce(Iterable<Tuple6<String, String, Boolean, String, Double, Integer>> values, Collector<Tuple9<String, String, String, Boolean, Double, Integer, Integer, Double, Integer>> out) throws Exception {
+                        Tuple9<String, String, String, Boolean, Double, Integer, Integer, Double, Integer> result =
+                                new Tuple9<String, String, String, Boolean, Double, Integer, Integer, Double, Integer>();
+                        int min = Integer.MAX_VALUE;
+                        int max = Integer.MIN_VALUE;
+                        int sum = 0;
+                        int count = 0;
+                        boolean first = true;
+                        for (Tuple6<String, String, Boolean, String, Double, Integer> t : values) {
+                            if (first) {
+                                result.f0 = t.f0;
+                                result.f1 = t.f1;
+                                result.f2 = t.f3;
+                                result.f3 = t.f2;
+                                result.f4 = t.f4;
+                                first = false;
+                            }
+                            int minutes = t.f5;
+                            sum += minutes;
+                            count++;
+                            if (minutes < min) {
+                                min = minutes;
+                            }
+                            if (minutes > max) {
+                                max = minutes;
+                            }
+                        }
+                        Double avg = (double) sum / (double) count;
+                        result.f5 = min;
+                        result.f6 = max;
+                        result.f7 = avg;
+                        result.f8 = count;
+                        out.collect(result);
                     }
-                    int minutes = t.f5;
-                    sum += minutes;
-                    count++;
-                    if (minutes < min) {
-                        min = minutes;
-                    }
-                    if (minutes > max) {
-                        max = minutes;
-                    }
-                }
-                Double avg = (double) sum / (double) count;
-                result.f5 = min;
-                result.f6 = max;
-                result.f7 = avg;
-                result.f8 = count;
-                out.collect(result);
-            }
-        });
+                });
 
         IterativeDataSet<Tuple6<String, String, Boolean, Integer, Double, Boolean>> initial = outgoingMarginals.union(incomingMarginals).iterate(MAX_ITERATIONS);
 
-        DataSet<Tuple5<String, String, String, Boolean, Double>> KiFractions = distances.join(initial.filter(new IncomingFilter())).where(1, 2, 3).equalTo(0, 1, 2).with(new KJoiner());
-        outgoingMarginals = KiFractions.groupBy(0, 2, 3).sum(4).join(initial.filter(new OutgoingFilter())).where(0, 2, 3).equalTo(0, 1, 2).with(new KUpdater());
+        DataSet<Tuple5<String, String, String, Boolean, Double>> KiFractions = distances
+                .join(initial.filter(new IncomingFilter()), JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where(1, 2, 3).equalTo(0, 1, 2).with(new KJoiner());
 
-        DataSet<Tuple5<String, String, String, Boolean, Double>> KjFractions = distances.join(outgoingMarginals).where(0, 2, 3).equalTo(0, 1, 2).with(new KJoiner());
-        incomingMarginals = KjFractions.groupBy(1, 2, 3).sum(4).join(initial.filter(new IncomingFilter())).where(1, 2, 3).equalTo(0, 1, 2).with(new KUpdater());
+        outgoingMarginals = KiFractions.groupBy(0, 2, 3).sum(4)
+                .join(initial.filter(new OutgoingFilter()), JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where(0, 2, 3).equalTo(0, 1, 2).with(new KUpdater());
+
+        DataSet<Tuple5<String, String, String, Boolean, Double>> KjFractions = distances
+                .join(outgoingMarginals, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where(0, 2, 3).equalTo(0, 1, 2).with(new KJoiner());
+
+        incomingMarginals = KjFractions.groupBy(1, 2, 3).sum(4)
+                .join(initial.filter(new IncomingFilter()), JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where(1, 2, 3).equalTo(0, 1, 2).with(new KUpdater());
 
         DataSet<Tuple6<String, String, Boolean, Integer, Double, Boolean>> iteration = outgoingMarginals.union(incomingMarginals);
-
         DataSet<Tuple6<String, String, Boolean, Integer, Double, Boolean>> result = initial.closeWith(iteration);
 
 
-        DataSet<Tuple5<String, String, String, Boolean, Double>> trafficMatrix = distances.join(result.filter(new OutgoingFilter())).where(0,2,3).equalTo(0,1,2).with(new TMJoinerOut()).join(result.filter(new IncomingFilter())).where(1,2,3).equalTo(0,1,2).with(new TMJoinerIn());
+        DataSet<Tuple5<String, String, String, Boolean, Double>> trafficMatrix = distances
+                .join(result.filter(new OutgoingFilter()), JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where(0,2,3).equalTo(0,1,2).with(new TMJoinerOut())
+                .join(result.filter(new IncomingFilter()), JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where(1,2,3).equalTo(0,1,2).with(new TMJoinerIn());
+
 
         trafficMatrix.project(0,1,2,4)/*.groupBy(2).sortGroup(3, Order.DESCENDING).first(100)*/.writeAsCsv(outputPath + "trafficMatrix", "\n", ",", FileSystem.WriteMode.OVERWRITE);
 
-        DataSet<Itinerary> nonStopItineraries = env.readFile(new FlightOutput.NonStopFullInputFormat(), outputPath + "oneFull").map(new FlightExtractor1());
-        DataSet<Itinerary> twoLegItineraries = env.readFile(new FlightOutput.TwoLegFullInputFormat(), outputPath + "twoFull").map(new FlightExtractor2());
-        DataSet<Itinerary> threeLegItineraries = env.readFile(new FlightOutput.ThreeLegFullInputFormat(), outputPath + "threeFull").map(new FlightExtractor3());
-
+        DataSet<Itinerary> nonStopItineraries = nonStopConnections.flatMap(new FlightExtractor1());
+        DataSet<Itinerary> twoLegItineraries = twoLegConnections.flatMap(new FlightExtractor2());
+        DataSet<Itinerary> threeLegItineraries = threeLegConnections.flatMap(new FlightExtractor3());
         DataSet<Itinerary> itineraries = nonStopItineraries.union(twoLegItineraries).union(threeLegItineraries);
 
         /*itineraries.filter(new FilterFunction<Itinerary>() {
@@ -234,13 +259,16 @@ public class TrafficAnalysis {
             }
         }).writeAsCsv(outputPath + "itineraries", "\n", ",", FileSystem.WriteMode.OVERWRITE);*/
 
-        DataSet<Itinerary> midt = env.readTextFile(outputPath + "MIDT/MIDTTotalHits.csv").flatMap(new MIDTParser()).groupBy(0,1,2,3,4,5,6).reduceGroup(new MIDTGrouper());
-        DataSet<Tuple4<String, String, String, LogitOptimizable>> trainedLogit = midt.groupBy(0,1,2).reduceGroup(new LogitTrainer());
+
+        DataSet<MIDT> midt = env.readTextFile("hdfs:///user/rwaury/input2/MIDTTotalHits.csv").flatMap(new MIDTParser()).groupBy(0,1,2,3,4,5,6,7).reduceGroup(new MIDTGrouper());
+        midt.groupBy(0,1,2).sortGroup(0, Order.ASCENDING).first(10000).writeAsCsv(outputPath + "groupedMIDT", "\n", ",", FileSystem.WriteMode.OVERWRITE);
+        DataSet<Tuple5<String, String, String, LogitOptimizable, Boolean>> trainedLogit = midt.groupBy(0,1,2).reduceGroup(new LogitTrainer());
         trainedLogit.writeAsCsv(outputPath + "logitResult", "\n", ",", FileSystem.WriteMode.OVERWRITE);
 
-        DataSet<Tuple5<String, String, String, Double, LogitOptimizable>> TMWithWeights = trafficMatrix.join(trainedLogit, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where(0,1,2).equalTo(0,1,2).with(new WeightTMJoiner());
+        DataSet<Tuple6<String, String, String, Double, LogitOptimizable, Boolean>> TMWithWeights = trafficMatrix
+                .join(trainedLogit, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where(0,1,2).equalTo(0,1,2).with(new WeightTMJoiner());
 
-        DataSet<Tuple7<String, String, String, String, String, String, Long>> estimate = itineraries.coGroup(TMWithWeights).where(0,1,2).equalTo(0,1,2).with(new TrafficEstimator());
+        DataSet<Tuple10<String, String, String, String, String, String, Long, Integer, Boolean, Itinerary>> estimate = itineraries.coGroup(TMWithWeights).where(0,1,2).equalTo(0,1,2).with(new TrafficEstimator());
 
         estimate.writeAsCsv(outputPath + "ItineraryEstimate", "\n", ",", FileSystem.WriteMode.OVERWRITE);
 
@@ -290,23 +318,29 @@ public class TrafficAnalysis {
         }
     }
 
-    private static class FlightExtractor1 implements MapFunction<Flight, Itinerary> {
+    private static class FlightExtractor1 implements FlatMapFunction<Flight, Itinerary> {
         SimpleDateFormat format = new SimpleDateFormat("ddMMyyyy");
         @Override
-        public Itinerary map(Flight flight) throws Exception {
+        public void flatMap(Flight flight, Collector<Itinerary> out) throws Exception {
+            if(flight.getDepartureTimestamp() > lastPossibleTimestamp || flight.getDepartureTimestamp() < firstPossibleTimestamp) {
+                return;
+            }
             Date date = new Date(flight.getDepartureTimestamp());
             String dayString = format.format(date);
             Double distance = dist(flight.getOriginLatitude(), flight.getOriginLongitude(), flight.getDestinationLatitude(), flight.getDestinationLongitude());
             Integer travelTime = (int) ((flight.getArrivalTimestamp() - flight.getDepartureTimestamp())/(60L*1000L));
-            return new Itinerary(flight.getOriginAirport(), flight.getDestinationAirport(), dayString,
-                    flight.getAirline() + flight.getFlightNumber(), "", "", "", distance, distance, travelTime, 0, flight.getLegCount(), flight.getMaxCapacity(), 0);
+            out.collect(new Itinerary(flight.getOriginAirport(), flight.getDestinationAirport(), dayString,
+                    flight.getAirline() + flight.getFlightNumber(), "", "", "", "", distance, distance, travelTime, 0, flight.getLegCount(), flight.getMaxCapacity(), 0, ""));
         }
     }
 
-    private static class FlightExtractor2 implements MapFunction<Tuple2<Flight, Flight>, Itinerary> {
+    private static class FlightExtractor2 implements FlatMapFunction<Tuple2<Flight, Flight>, Itinerary> {
         SimpleDateFormat format = new SimpleDateFormat("ddMMyyyy");
         @Override
-        public Itinerary map(Tuple2<Flight, Flight> flight) throws Exception {
+        public void flatMap(Tuple2<Flight, Flight> flight, Collector<Itinerary> out) throws Exception {
+            if(flight.f0.getDepartureTimestamp() > lastPossibleTimestamp || flight.f0.getDepartureTimestamp() < firstPossibleTimestamp) {
+                return;
+            }
             Date date = new Date(flight.f0.getDepartureTimestamp());
             String dayString = format.format(date);
             Double directDistance = dist(flight.f0.getOriginLatitude(), flight.f0.getOriginLongitude(), flight.f1.getDestinationLatitude(), flight.f1.getDestinationLongitude());
@@ -316,16 +350,19 @@ public class TrafficAnalysis {
             Integer waitingTime = (int) ((flight.f1.getDepartureTimestamp() - flight.f0.getArrivalTimestamp())/(60L*1000L));
             Integer legCount = flight.f0.getLegCount() + flight.f1.getLegCount();
             Integer maxCapacity = Math.min(flight.f0.getMaxCapacity(), flight.f1.getMaxCapacity());
-            return new Itinerary(flight.f0.getOriginAirport(), flight.f1.getDestinationAirport(), dayString,
-                    flight.f0.getAirline() + flight.f0.getFlightNumber(), flight.f1.getAirline() + flight.f1.getFlightNumber(), "", "",
-                    directDistance, travelledDistance, travelTime, waitingTime, legCount, maxCapacity, 0);
+            out.collect(new Itinerary(flight.f0.getOriginAirport(), flight.f1.getDestinationAirport(), dayString,
+                    flight.f0.getAirline() + flight.f0.getFlightNumber(), flight.f1.getAirline() + flight.f1.getFlightNumber(), "", "", "",
+                    directDistance, travelledDistance, travelTime, waitingTime, legCount, maxCapacity, 0, ""));
         }
     }
 
-    private static class FlightExtractor3 implements MapFunction<Tuple3<Flight, Flight, Flight>, Itinerary> {
+    private static class FlightExtractor3 implements FlatMapFunction<Tuple3<Flight, Flight, Flight>, Itinerary> {
         SimpleDateFormat format = new SimpleDateFormat("ddMMyyyy");
         @Override
-        public Itinerary map(Tuple3<Flight, Flight, Flight> flight) throws Exception {
+        public void flatMap(Tuple3<Flight, Flight, Flight> flight, Collector<Itinerary> out) throws Exception {
+            if(flight.f0.getDepartureTimestamp() > lastPossibleTimestamp || flight.f0.getDepartureTimestamp() < firstPossibleTimestamp) {
+                return;
+            }
             Date date = new Date(flight.f0.getDepartureTimestamp());
             String dayString = format.format(date);
             Double directDistance = dist(flight.f0.getOriginLatitude(), flight.f0.getOriginLongitude(), flight.f2.getDestinationLatitude(), flight.f2.getDestinationLongitude());
@@ -339,19 +376,18 @@ public class TrafficAnalysis {
                     (60L*1000L));
             Integer legCount = flight.f0.getLegCount() + flight.f1.getLegCount() + flight.f2.getLegCount();
             Integer maxCapacity = Math.min(flight.f0.getMaxCapacity(), Math.min(flight.f1.getMaxCapacity(), flight.f2.getMaxCapacity()));
-            return new Itinerary(flight.f0.getOriginAirport(), flight.f2.getDestinationAirport(), dayString,
-                    flight.f0.getAirline() + flight.f0.getFlightNumber(), flight.f1.getAirline() + flight.f1.getFlightNumber(), flight.f2.getAirline() + flight.f2.getFlightNumber(), "",
-                    directDistance, travelledDistance, travelTime, waitingTime, legCount, maxCapacity, 0);
+            out.collect(new Itinerary(flight.f0.getOriginAirport(), flight.f2.getDestinationAirport(), dayString,
+                    flight.f0.getAirline() + flight.f0.getFlightNumber(), flight.f1.getAirline() + flight.f1.getFlightNumber(), flight.f2.getAirline() + flight.f2.getFlightNumber(), "", "",
+                    directDistance, travelledDistance, travelTime, waitingTime, legCount, maxCapacity, 0, ""));
         }
     }
 
-    private static class MIDTParser implements FlatMapFunction<String, Itinerary> {
+    private static class MIDTParser implements FlatMapFunction<String, MIDT> {
 
         SimpleDateFormat format = new SimpleDateFormat("ddMMyyyy");
-        private static long firstPossibleTimestamp = 1399248000000L;
 
         @Override
-        public void flatMap(String s, Collector<Itinerary> out) throws Exception {
+        public void flatMap(String s, Collector<MIDT> out) throws Exception {
             if(s.startsWith("$")) {
                 return;
             }
@@ -364,74 +400,90 @@ public class TrafficAnalysis {
             String destination = tmp[1].trim();
             int pax = Integer.parseInt(tmp[2].trim());
             int segmentCount = Integer.parseInt(tmp[3].trim());
-            String flight1 = tmp[9].trim() + tmp[10].trim();
+            String flight1 = tmp[9].trim() + tmp[10].replaceAll("[^0-9]", "");
             String flight2 = "";
             String flight3 = "";
             String flight4 = "";
+            String flight5 = "";
+            long departureDay = Long.parseLong(tmp[11].trim())-1;
+            if(departureDay > 6) {
+                throw new Exception("Value error: " + s);
+            }
             int departure = Integer.parseInt(tmp[12].trim());
             int arrival = Integer.parseInt(tmp[14].trim());
             int waitingTime = 0;
             int tmpDep = 0;
             if(segmentCount > 1) {
-                flight2 = tmp[18].trim() + tmp[19].trim();
+                flight2 = tmp[18].trim() + tmp[19].replaceAll("[^0-9]", "");
                 tmpDep = Integer.parseInt(tmp[21].trim());
                 waitingTime += tmpDep - arrival;
                 arrival = Integer.parseInt(tmp[23].trim());
             }
             if(segmentCount > 2) {
-                flight3 = tmp[27].trim() + tmp[28].trim();
+                flight3 = tmp[27].trim() + tmp[28].replaceAll("[^0-9]", "");
                 tmpDep = Integer.parseInt(tmp[30].trim());
                 waitingTime += tmpDep - arrival;
                 arrival = Integer.parseInt(tmp[32].trim());
             }
             if(segmentCount > 3) {
-                flight4 = tmp[36].trim() + tmp[37].trim();
+                flight4 = tmp[36].trim() + tmp[37].replaceAll("[^0-9]", "");
                 tmpDep = Integer.parseInt(tmp[39].trim());
                 waitingTime += tmpDep - arrival;
                 arrival = Integer.parseInt(tmp[41].trim());
             }
+            if(segmentCount > 4) {
+                flight5 = tmp[45].trim() + tmp[46].replaceAll("[^0-9]", "");
+                tmpDep = Integer.parseInt(tmp[48].trim());
+                waitingTime += tmpDep - arrival;
+                arrival = Integer.parseInt(tmp[49].trim());
+            }
             int travelTime = arrival - departure;
-            long departureTimestamp = firstPossibleTimestamp + (departure*60L*1000L);
+            if(travelTime < 0) {
+                return;
+            }
+            long departureTimestamp = firstPossibleTimestamp + (departureDay*24L*60L*60L*1000L);
             Date date = new Date(departureTimestamp);
             String dayString = format.format(date);
-            Itinerary result = new Itinerary(origin, destination, dayString,
-                    flight1, flight2, flight3, flight4, 0.0, 0.0, travelTime, waitingTime,
-                    segmentCount, 0, pax);
+            MIDT result = new MIDT(origin, destination, dayString,
+                    flight1, flight2, flight3, flight4, flight5, travelTime, waitingTime,
+                    segmentCount, pax);
             out.collect(result);
         }
     }
 
-    private static class MIDTGrouper implements GroupReduceFunction<Itinerary, Itinerary> {
+    private static class MIDTGrouper implements GroupReduceFunction<MIDT, MIDT> {
 
         @Override
-        public void reduce(Iterable<Itinerary> midts, Collector<Itinerary> out) throws Exception {
+        public void reduce(Iterable<MIDT> midts, Collector<MIDT> out) throws Exception {
             int paxSum = 0;
-            Iterator<Itinerary> iterator = midts.iterator();
-            Itinerary midt = null;
+            int count = 0;
+            Iterator<MIDT> iterator = midts.iterator();
+            MIDT midt = null;
             while(iterator.hasNext()) {
                 midt = iterator.next();
-                paxSum += midt.f13;
+                paxSum += midt.f11;
+                count++;
             }
-            midt.f13 = paxSum;
-            out.collect(midt);
+            MIDT result = new MIDT(midt.f0, midt.f1, midt.f2, midt.f3, midt.f4, midt.f5, midt.f6, midt.f7, midt.f8, midt.f9, midt.f10, paxSum);
+            out.collect(result);
         }
     }
 
-    private static class LogitTrainer implements GroupReduceFunction<Itinerary, Tuple4<String, String, String, LogitOptimizable>> {
+    private static class LogitTrainer implements GroupReduceFunction<MIDT, Tuple5<String, String, String, LogitOptimizable, Boolean>> {
 
         @Override
-        public void reduce(Iterable<Itinerary> itineraries, Collector<Tuple4<String, String, String, LogitOptimizable>> out) throws Exception {
+        public void reduce(Iterable<MIDT> midts, Collector<Tuple5<String, String, String, LogitOptimizable, Boolean>> out) throws Exception {
             ArrayList<LogitOptimizable.TrainingData> trainingData = new ArrayList<LogitOptimizable.TrainingData>();
-            Iterator<Itinerary> iterator = itineraries.iterator();
-            Itinerary itin = null;
+            Iterator<MIDT> iterator = midts.iterator();
+            MIDT midt = null;
             int minTravelTime = Integer.MAX_VALUE;
             while(iterator.hasNext()) {
-                itin = iterator.next();
-                if(itin.f10 < minTravelTime) {
-                    minTravelTime = itin.f10;
+                midt = iterator.next();
+                if(midt.f8 < minTravelTime) {
+                    minTravelTime = midt.f8;
                 }
-                double percentageWaiting = (itin.f10 == 0 || itin.f9 == 0) ? 0 : itin.f10/itin.f9;
-                trainingData.add(new LogitOptimizable.TrainingData(itin.f10, percentageWaiting, itin.f12, itin.f13));
+                double percentageWaiting = (midt.f8 == 0 || midt.f9 == 0) ? 0 : midt.f9/midt.f8;
+                trainingData.add(new LogitOptimizable.TrainingData(midt.f8, percentageWaiting, midt.f10, midt.f11));
             }
             if(trainingData.size() < 2) {
                 return;
@@ -453,48 +505,60 @@ public class TrafficAnalysis {
                 // the optimizer has failed, but it doesn't want
                 // to claim to have succeeded...
             } catch (OptimizationException o) {
+                // see above
             } catch (Throwable t) {
                 throw new Exception("Something went wrong in the optimizer. " + t.getMessage());
             }
-            optimizable.clear();
-            out.collect(new Tuple4<String, String, String, LogitOptimizable>(itin.f0, itin.f1, itin.f2, optimizable));
+            optimizable.clear(); // push the results in the tuple
+            out.collect(new Tuple5<String, String, String, LogitOptimizable, Boolean>(midt.f0, midt.f1, midt.f2, optimizable, converged));
         }
     }
 
-    private static class WeightTMJoiner implements JoinFunction<Tuple5<String, String, String, Boolean, Double>, Tuple4<String, String, String, LogitOptimizable>,
-            Tuple5<String, String, String, Double, LogitOptimizable>> {
+    private static class WeightTMJoiner implements JoinFunction<Tuple5<String, String, String, Boolean, Double>, Tuple5<String, String, String, LogitOptimizable, Boolean>,
+            Tuple6<String, String, String, Double, LogitOptimizable, Boolean>> {
 
         @Override
-        public Tuple5<String, String, String, Double, LogitOptimizable> join(Tuple5<String, String, String, Boolean, Double> tmEntry, Tuple4<String, String, String, LogitOptimizable> logit) throws Exception {
-            return new Tuple5<String, String, String, Double, LogitOptimizable>(tmEntry.f0, tmEntry.f1, tmEntry.f2, tmEntry.f4, logit.f3);
+        public Tuple6<String, String, String, Double, LogitOptimizable, Boolean> join(Tuple5<String, String, String, Boolean, Double> tmEntry, Tuple5<String, String, String, LogitOptimizable, Boolean> logit) throws Exception {
+            return new Tuple6<String, String, String, Double, LogitOptimizable, Boolean>(tmEntry.f0, tmEntry.f1, tmEntry.f2, tmEntry.f4, logit.f3, logit.f4);
         }
     }
 
-    private static class TrafficEstimator implements CoGroupFunction<Itinerary, Tuple5<String, String, String, Double, LogitOptimizable>,
-            Tuple7<String, String, String, String, String, String, Long>> {
+    private static class TrafficEstimator implements CoGroupFunction<Itinerary, Tuple6<String, String, String, Double, LogitOptimizable, Boolean>,
+            Tuple10<String, String, String, String, String, String, Long, Integer, Boolean, Itinerary>> {
 
         @Override
-        public void coGroup(Iterable<Itinerary> connections, Iterable<Tuple5<String, String, String, Double, LogitOptimizable>> logitModel,
-                            Collector<Tuple7<String, String, String, String, String, String, Long>> out) throws Exception {
-            Iterator<Tuple5<String, String, String, Double, LogitOptimizable>> logitIter = logitModel.iterator();
+        public void coGroup(Iterable<Itinerary> connections, Iterable<Tuple6<String, String, String, Double, LogitOptimizable, Boolean>> logitModel,
+                            Collector<Tuple10<String, String, String, String, String, String, Long, Integer, Boolean, Itinerary>> out) throws Exception {
+            Iterator<Tuple6<String, String, String, Double, LogitOptimizable, Boolean>> logitIter = logitModel.iterator();
             if(!logitIter.hasNext()) {
-                return;
+                return; // no model
             }
-            Tuple5<String, String, String, Double, LogitOptimizable> tuple = logitIter.next();
-            double estimate = tuple.f3;
-            double[] weights = tuple.f4.asArray();
-            Iterator<Itinerary> iter = connections.iterator();
-            if(!iter.hasNext()) {
-                return;
+            Tuple6<String, String, String, Double, LogitOptimizable, Boolean> logit = logitIter.next();
+            if(logitIter.hasNext()) {
+                throw new Exception("More than one logit model: " + logitIter.next().toString());
             }
-            ArrayList<Itinerary> itineraries = new ArrayList<Itinerary>();
+            double estimate = logit.f3;
+            double[] weights = logit.f4.asArray();
+            Iterator<Itinerary> connIter = connections.iterator();
+            if(!connIter.hasNext()) {
+                return; // no connections
+            }
+            int count = 0;
+            HashSet<Itinerary> itineraries = new HashSet<Itinerary>();
             int minTime = Integer.MAX_VALUE;
-            while (iter.hasNext()) {
-                Itinerary e = iter.next();
+            while (connIter.hasNext()) {
+                Itinerary e = connIter.next();
+                /*if(itineraries.contains(e)) {
+                    throw new Exception("Itinerary found twice:" + e.toString());
+                }*/
                 itineraries.add(e);
-                if(e.f9 < minTime) {
-                    minTime = e.f9;
+                if(e.f10 < minTime) {
+                    minTime = e.f10;
                 }
+                count++;
+            }
+            if(minTime < 1) {
+                minTime = 1;
             }
             double softmaxSum = 0.0;
             for(Itinerary e : itineraries) {
@@ -504,7 +568,7 @@ public class TrafficAnalysis {
                 double itineraryEstimate = LogitOptimizable.softmax(e, softmaxSum, weights, minTime)*estimate;
                 long roundedEstimate = Math.round(itineraryEstimate);
                 if(roundedEstimate > 0L) {
-                    out.collect(new Tuple7<String, String, String, String, String, String, Long>(e.f0, e.f1, e.f2, e.f3, e.f4, e.f5, roundedEstimate));
+                    out.collect(new Tuple10<String, String, String, String, String, String, Long, Integer, Boolean, Itinerary>(e.f0, e.f1, e.f2, e.f3, e.f4, e.f5, roundedEstimate, e.f10, logit.f5, e));
                 }
             }
 

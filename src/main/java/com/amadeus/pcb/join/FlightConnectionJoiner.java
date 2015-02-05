@@ -21,6 +21,14 @@ public class FlightConnectionJoiner {
 
     public static final Logger LOG = LoggerFactory.getLogger(FlightConnectionJoiner.class);
 
+    private static String schedulePath = "hdfs:///user/rwaury/input2/all_catalog_140410.txt";
+    private static String oriPath = "hdfs:///user/rwaury/input2/ori_por_public.csv";
+    private static String regionPath = "hdfs:///user/rwaury/input2/ori_country_region_info.csv";
+    private static String defaultCapacityPath = "hdfs:///user/rwaury/input2/default_capacities.csv";
+    private static String capacityPath = "hdfs:///user/rwaury/input2/capacities_2014-07-01.csv";
+    private static String mctPath = "hdfs:///user/rwaury/input2/mct.csv";
+    private static String outputPath = "hdfs:///user/rwaury/output2/flights/";
+
     public static final long START = 1398902400000L;//1398902400000L;
     public static final long END = 1401580800000L;//1399507200000L;//1399020800000L;//
 
@@ -1370,10 +1378,7 @@ public class FlightConnectionJoiner {
     public static void main(String[] args) throws Exception {
         long start = System.currentTimeMillis();
         LOG.info("Job started at {} milliseconds.", start);
-        if (!parseParameters(args)) {
-            return;
-        }
-        int phase = 2;
+        int phase = 0;
         if (args.length == 1) {
             phase = Integer.parseInt(args[0]);
         }
@@ -2349,40 +2354,4 @@ public class FlightConnectionJoiner {
             out.collect(output);
         }
     }
-
-
-    private static String schedulePath;
-    private static String oriPath;
-    private static String regionPath;
-    private static String defaultCapacityPath;
-    private static String capacityPath;
-    private static String mctPath;
-    private static String outputPath;
-
-    private static boolean parseParameters(String[] args) {
-        if (args.length == 0) {
-            schedulePath = "file:///home/robert/Amadeus/data/week/";//"hdfs:///user/rwaury/input/all_catalog_140410.txt";//
-            oriPath = "file:///home/robert/Amadeus/data/ori_por_public.txt";//"hdfs:///user/rwaury/input/ori_por_public.csv";//
-            regionPath = "file:///home/robert/Amadeus/data/ori_country_region_info.csv";//"hdfs:///user/rwaury/input/ori_country_region_info.csv";//
-            defaultCapacityPath = "file:///home/robert/Amadeus/data/default_capacities.csv";//"hdfs:///user/rwaury/input/default_capacities.csv";//
-            capacityPath = "file:///home/robert/Amadeus/data/capacities_2014-07-01.csv";//"hdfs:///user/rwaury/input/capacities_2014-07-01.csv";//
-            mctPath = "file:///home/robert/Amadeus/data/mct.csv";//"hdfs:///user/rwaury/input/mct.csv";//
-            outputPath = "file:///home/robert/Amadeus/data/resultConnections/";//"hdfs:///user/rwaury/output/flights/";//
-            return true;
-        }
-        if (args.length == 1) {
-            schedulePath = "hdfs:///user/rwaury/input/all_catalog_140410.txt";//
-            oriPath = "hdfs:///user/rwaury/input/ori_por_public.csv";//
-            regionPath = "hdfs:///user/rwaury/input/ori_country_region_info.csv";//
-            defaultCapacityPath = "hdfs:///user/rwaury/input/default_capacities.csv";//
-            capacityPath = "hdfs:///user/rwaury/input/capacities_2014-07-01.csv";//
-            mctPath = "hdfs:///user/rwaury/input/mct.csv";//
-            outputPath = "hdfs:///user/rwaury/output/flights/";//
-            return true;
-        }
-        //System.err.println("Usage: FlightConnectionJoiner <schedule path> <ori path> <output path>");
-        return false;
-    }
-
-
 }
