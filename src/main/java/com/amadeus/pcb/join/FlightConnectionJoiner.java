@@ -29,8 +29,8 @@ public class FlightConnectionJoiner {
     private static String mctPath = "hdfs:///user/rwaury/input2/mct.csv";
     private static String outputPath = "hdfs:///user/rwaury/output2/flights/";
 
-    public static final long START = 1398902400000L;//1398902400000L;
-    public static final long END = 1401580800000L;//1399507200000L;//1399020800000L;//
+    public static final long START = 1399248000000L;//1398902400000L;//1398902400000L;
+    public static final long END = 1399852800000L;//1401580800000L;//1399507200000L;//1399020800000L;//
 
     public static final long WEEK_START = 1399248000000L;
     public static final long WEEK_END = 1399852800000L;
@@ -164,6 +164,9 @@ public class FlightConnectionJoiner {
 						"Departure: " + departure.toString() + " Arrival: " + arrival.toString() + "\n"  + 
 						"Sign: " + sign + " Hours: " + hours + " Minutes: " + minutes + "\n" +
 						"Original value: " + value);*/
+            }
+            if((arrival.getTime() - departure.getTime()) <= 60L*1000L) {
+                return; // flights of a minute or less are ignored
             }
             String codeshareInfo = "";
             if (tmp.length > 36) {

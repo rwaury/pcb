@@ -31,4 +31,27 @@ public class Itinerary extends Tuple16<String, String, String, String, String, S
         this.f15 = full;
     }
 
+    public Itinerary(Tuple16<String, String, String, String, String, String, String, String, Double, Double, Integer, Integer, Integer, Integer, Integer, String> tuple16) {
+        this.f0 = tuple16.f0;
+        this.f1 = tuple16.f1;
+        this.f2 = tuple16.f2;
+        this.f3 = tuple16.f3;
+        this.f4 = tuple16.f4;
+        this.f5 = tuple16.f5;
+        this.f6 = tuple16.f6;
+        this.f7 = tuple16.f7;
+        this.f8 = tuple16.f8;
+        this.f9 = tuple16.f9;
+        this.f10 = tuple16.f10;
+        this.f11 = tuple16.f11;
+        this.f12 = tuple16.f12;
+        this.f13 = tuple16.f13;
+        this.f14 = tuple16.f14;
+        this.f15 = tuple16.f15;
+    }
+
+    public Itinerary deepCopy() {
+        return new Itinerary(this.copy());
+    }
+
 }

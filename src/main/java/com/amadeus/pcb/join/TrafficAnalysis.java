@@ -3,6 +3,9 @@ package com.amadeus.pcb.join;
 import cc.mallet.optimize.LimitedMemoryBFGS;
 import cc.mallet.optimize.OptimizationException;
 import net.didion.jwnl.data.Exc;
+import org.apache.commons.math3.linear.Array2DRowRealMatrix;
+import org.apache.commons.math3.linear.ArrayRealVector;
+import org.apache.commons.math3.linear.RealVector;
 import org.apache.flink.api.common.functions.*;
 import org.apache.flink.api.common.operators.Order;
 import org.apache.flink.api.common.operators.base.JoinOperatorBase;
@@ -10,18 +13,18 @@ import org.apache.flink.api.java.DataSet;
 import org.apache.flink.api.java.ExecutionEnvironment;
 import org.apache.flink.api.java.operators.IterativeDataSet;
 import org.apache.flink.api.java.tuple.*;
+import org.apache.flink.configuration.Configuration;
 import org.apache.flink.core.fs.FileSystem;
 import org.apache.flink.util.Collector;
+import org.apache.hadoop.util.hash.Hash;
 
+import java.io.Serializable;
 import java.text.SimpleDateFormat;
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.HashSet;
-import java.util.Iterator;
+import java.util.*;
 
 public class TrafficAnalysis {
 
-    private static final double SLF = 0.8;
+    private static final double SLF = 0.795;
 
     private static final double WAITING_FACTOR = 1.0;
 
@@ -32,9 +35,13 @@ public class TrafficAnalysis {
     private static final int MAX_OPTIMIZER_ITERATIONS = 1000;
 
     private static long firstPossibleTimestamp = 1399248000000L;
-    private static long lastPossibleTimestamp = 1399334399000L;
+    private static long lastPossibleTimestamp = 1399939199000L;
 
     private static String outputPath = "hdfs:///user/rwaury/output2/flights/";
+
+    private static String INVERTED_COVARIANCE_MATRIX = "InvertedCovarianceMatrixBroadcastSet";
+
+    private static final int OD_FEATURE_COUNT = 5;
 
     public static void main(String[] args) throws Exception {
         ExecutionEnvironment env = ExecutionEnvironment.getExecutionEnvironment();
@@ -55,7 +62,7 @@ public class TrafficAnalysis {
                 Date date = new Date(flight.getDepartureTimestamp());
                 String dayString = format.format(date);
                 boolean isInternational = !flight.getOriginCountry().equals(flight.getDestinationCountry());
-                int roundedCapacity = (int)Math.round((SLF*flight.getMaxCapacity()));
+                int roundedCapacity = flight.getMaxCapacity();
                 int capacity = (roundedCapacity > 0) ? roundedCapacity : 1;
                 Tuple5<String, String, Boolean, Integer, Integer> outgoing = new Tuple5<String, String, Boolean, Integer, Integer>
                         (flight.getOriginAirport(), dayString, isInternational, capacity, 0);
@@ -85,6 +92,7 @@ public class TrafficAnalysis {
                     }
                     result.f3 += t.f3;
                 }
+                result.f3 = (int)Math.round(SLF*result.f3);
                 out.collect(result);
             }
         });
@@ -107,6 +115,7 @@ public class TrafficAnalysis {
                     }
                     result.f3 += t.f4;
                 }
+                result.f3 = (int)Math.round(SLF*result.f3);
                 out.collect(result);
             }
         });
@@ -183,24 +192,25 @@ public class TrafficAnalysis {
         });
 
         DataSet<Tuple6<String, String, Boolean, String, Double, Integer>> flights = nonStop.union(twoLeg).union(threeLeg);
-        DataSet<Tuple9<String, String, String, Boolean, Double, Integer, Integer, Double, Integer>> distances = flights.groupBy(0, 1, 2, 3)
-                .reduceGroup(new GroupReduceFunction<Tuple6<String, String, Boolean, String, Double, Integer>, Tuple9<String, String, String, Boolean, Double, Integer, Integer, Double, Integer>>() {
+        DataSet<Tuple5<String, String, String, Boolean, SerializableVector>> distances = flights.groupBy(0, 1, 2, 3)
+                .reduceGroup(new GroupReduceFunction<Tuple6<String, String, Boolean, String, Double, Integer>, Tuple5<String, String, String, Boolean, SerializableVector>>() {
                     @Override
-                    public void reduce(Iterable<Tuple6<String, String, Boolean, String, Double, Integer>> values, Collector<Tuple9<String, String, String, Boolean, Double, Integer, Integer, Double, Integer>> out) throws Exception {
-                        Tuple9<String, String, String, Boolean, Double, Integer, Integer, Double, Integer> result =
-                                new Tuple9<String, String, String, Boolean, Double, Integer, Integer, Double, Integer>();
+                    public void reduce(Iterable<Tuple6<String, String, Boolean, String, Double, Integer>> values, Collector<Tuple5<String, String, String, Boolean, SerializableVector>> out) throws Exception {
+                        Tuple5<String, String, String, Boolean, SerializableVector> result =
+                                new Tuple5<String, String, String, Boolean, SerializableVector>();
                         int min = Integer.MAX_VALUE;
                         int max = Integer.MIN_VALUE;
                         int sum = 0;
                         int count = 0;
                         boolean first = true;
+                        SerializableVector vector = new SerializableVector(OD_FEATURE_COUNT);
                         for (Tuple6<String, String, Boolean, String, Double, Integer> t : values) {
                             if (first) {
                                 result.f0 = t.f0;
                                 result.f1 = t.f1;
                                 result.f2 = t.f3;
                                 result.f3 = t.f2;
-                                result.f4 = t.f4;
+                                vector.getVector().setEntry(0, t.f4);
                                 first = false;
                             }
                             int minutes = t.f5;
@@ -214,10 +224,11 @@ public class TrafficAnalysis {
                             }
                         }
                         Double avg = (double) sum / (double) count;
-                        result.f5 = min;
-                        result.f6 = max;
-                        result.f7 = avg;
-                        result.f8 = count;
+                        vector.getVector().setEntry(1, (double)min);
+                        vector.getVector().setEntry(2, (double)max);
+                        vector.getVector().setEntry(3, avg);
+                        vector.getVector().setEntry(4, (double)count);
+                        result.f4 = vector;
                         out.collect(result);
                     }
                 });
@@ -240,12 +251,13 @@ public class TrafficAnalysis {
         DataSet<Tuple6<String, String, Boolean, Integer, Double, Boolean>> result = initial.closeWith(iteration);
 
 
-        DataSet<Tuple5<String, String, String, Boolean, Double>> trafficMatrix = distances
+        DataSet<Tuple5<String, String, String, Double, SerializableVector>> trafficMatrix = distances
                 .join(result.filter(new OutgoingFilter()), JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where(0,2,3).equalTo(0,1,2).with(new TMJoinerOut())
-                .join(result.filter(new IncomingFilter()), JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where(1,2,3).equalTo(0,1,2).with(new TMJoinerIn());
+                .join(result.filter(new IncomingFilter()), JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where(1,2,3).equalTo(0,1,2).with(new TMJoinerIn())
+                .project(0, 1, 2, 4, 5);
 
 
-        trafficMatrix.project(0,1,2,4)/*.groupBy(2).sortGroup(3, Order.DESCENDING).first(100)*/.writeAsCsv(outputPath + "trafficMatrix", "\n", ",", FileSystem.WriteMode.OVERWRITE);
+        trafficMatrix/*.groupBy(2).sortGroup(3, Order.DESCENDING).first(100)*/.writeAsCsv(outputPath + "trafficMatrix", "\n", ",", FileSystem.WriteMode.OVERWRITE);
 
         DataSet<Itinerary> nonStopItineraries = nonStopConnections.flatMap(new FlightExtractor1());
         DataSet<Itinerary> twoLegItineraries = twoLegConnections.flatMap(new FlightExtractor2());
@@ -261,24 +273,37 @@ public class TrafficAnalysis {
 
 
         DataSet<MIDT> midt = env.readTextFile("hdfs:///user/rwaury/input2/MIDTTotalHits.csv").flatMap(new MIDTParser()).groupBy(0,1,2,3,4,5,6,7).reduceGroup(new MIDTGrouper());
-        midt.groupBy(0,1,2).sortGroup(0, Order.ASCENDING).first(10000).writeAsCsv(outputPath + "groupedMIDT", "\n", ",", FileSystem.WriteMode.OVERWRITE);
-        DataSet<Tuple5<String, String, String, LogitOptimizable, Boolean>> trainedLogit = midt.groupBy(0,1,2).reduceGroup(new LogitTrainer());
-        trainedLogit.writeAsCsv(outputPath + "logitResult", "\n", ",", FileSystem.WriteMode.OVERWRITE);
+        DataSet<Tuple5<String, String, String, Integer, Integer>> bounds = midt.map(new LowerBoundExtractor());
+        bounds.writeAsCsv(outputPath + "bounds", "\n", ",", FileSystem.WriteMode.OVERWRITE);
+        //midt.groupBy(0,1,2).sortGroup(0, Order.ASCENDING).first(10000).writeAsCsv(outputPath + "groupedMIDT", "\n", ",", FileSystem.WriteMode.OVERWRITE);
+        DataSet<Tuple4<String, String, String, LogitOptimizable>> trainedLogit = midt.groupBy(0,1,2).reduceGroup(new LogitTrainer());
+        //trainedLogit.writeAsCsv(outputPath + "logitResult", "\n", ",", FileSystem.WriteMode.OVERWRITE);
 
-        DataSet<Tuple6<String, String, String, Double, LogitOptimizable, Boolean>> TMWithWeights = trafficMatrix
+        DataSet<Tuple6<String, String, String, Double, SerializableVector, LogitOptimizable>> TMWithWeights = trafficMatrix
                 .join(trainedLogit, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where(0,1,2).equalTo(0,1,2).with(new WeightTMJoiner());
 
-        DataSet<Tuple10<String, String, String, String, String, String, Long, Integer, Boolean, Itinerary>> estimate = itineraries.coGroup(TMWithWeights).where(0,1,2).equalTo(0,1,2).with(new TrafficEstimator());
 
-        estimate.writeAsCsv(outputPath + "ItineraryEstimate", "\n", ",", FileSystem.WriteMode.OVERWRITE);
+
+        //TMWithWeights.groupBy(0,1,2).sortGroup(2, Order.ASCENDING).first(10000000).writeAsCsv(outputPath + "tmWeights", "\n", ",", FileSystem.WriteMode.OVERWRITE);
+
+        //itineraries.groupBy(0,1,2,3,4,5,6,7).sortGroup(2, Order.ASCENDING).first(1000000000).writeAsCsv(outputPath + "itineraries", "\n", ",", FileSystem.WriteMode.OVERWRITE);
+
+        DataSet<Tuple5<String, String, String, Double, LogitOptimizable>> allWeighted = TMWithWeights.coGroup(trafficMatrix).where(2).equalTo(2).with(new ODDistanceComparator());
+
+        DataSet<Tuple11<String, String, String, String, String, String, Long, Integer, Itinerary, Integer, Double>> estimate = itineraries.coGroup(allWeighted).where(0,1,2).equalTo(0,1,2).with(new TrafficEstimator());
+
+        estimate.groupBy(0,1).sortGroup(6, Order.DESCENDING).first(1000000000).writeAsCsv(outputPath + "ItineraryEstimate", "\n", ",", FileSystem.WriteMode.OVERWRITE);
+
+        estimate.groupBy(0,1).reduceGroup(new ODSum()).writeAsCsv(outputPath + "ODSum", "\n", ",", FileSystem.WriteMode.OVERWRITE);
 
         env.execute("TrafficAnalysis");
     }
 
-    private static class KJoiner implements JoinFunction<Tuple9<String, String, String, Boolean, Double, Integer, Integer, Double, Integer>, Tuple6<String, String, Boolean, Integer, Double, Boolean>, Tuple5<String, String, String, Boolean, Double>> {
+    private static class KJoiner implements JoinFunction<Tuple5<String, String, String, Boolean, SerializableVector>, Tuple6<String, String, Boolean, Integer, Double, Boolean>, Tuple5<String, String, String, Boolean, Double>> {
         @Override
-        public Tuple5<String, String, String, Boolean, Double> join(Tuple9<String, String, String, Boolean, Double, Integer, Integer, Double, Integer> distance, Tuple6<String, String, Boolean, Integer, Double, Boolean> marginal) throws Exception {
-            return new Tuple5<String, String, String, Boolean, Double>(distance.f0, distance.f1, distance.f2, distance.f3, marginal.f3*marginal.f4*decayingFunction((double)distance.f5));
+        public Tuple5<String, String, String, Boolean, Double> join(Tuple5<String, String, String, Boolean, SerializableVector> distance, Tuple6<String, String, Boolean, Integer, Double, Boolean> marginal) throws Exception {
+            return new Tuple5<String, String, String, Boolean, Double>(distance.f0, distance.f1, distance.f2, distance.f3,
+                    marginal.f3*marginal.f4*decayingFunction(distance.f4.getVector().getEntry(0), distance.f4.getVector().getEntry(1), distance.f4.getVector().getEntry(2), distance.f4.getVector().getEntry(3), distance.f4.getVector().getEntry(4)));
         }
     }
 
@@ -304,17 +329,18 @@ public class TrafficAnalysis {
         }
     }
 
-    private static class TMJoinerOut implements JoinFunction<Tuple9<String, String, String, Boolean, Double, Integer, Integer, Double, Integer>, Tuple6<String, String, Boolean, Integer, Double, Boolean>, Tuple5<String, String, String, Boolean, Double>> {
+    private static class TMJoinerOut implements JoinFunction<Tuple5<String, String, String, Boolean, SerializableVector>, Tuple6<String, String, Boolean, Integer, Double, Boolean>, Tuple6<String, String, String, Boolean, Double, SerializableVector>> {
         @Override
-        public Tuple5<String, String, String, Boolean, Double> join(Tuple9<String, String, String, Boolean, Double, Integer, Integer, Double, Integer> distance, Tuple6<String, String, Boolean, Integer, Double, Boolean> marginal) throws Exception {
-            return new Tuple5<String, String, String, Boolean, Double>(distance.f0, distance.f1, distance.f2, distance.f3, marginal.f3*marginal.f4*decayingFunction((double)distance.f5));
+        public Tuple6<String, String, String, Boolean, Double, SerializableVector> join(Tuple5<String, String, String, Boolean, SerializableVector> distance, Tuple6<String, String, Boolean, Integer, Double, Boolean> marginal) throws Exception {
+            return new Tuple6<String, String, String, Boolean, Double, SerializableVector>(distance.f0, distance.f1, distance.f2, distance.f3,
+                    marginal.f3*marginal.f4*decayingFunction(distance.f4.getVector().getEntry(0), distance.f4.getVector().getEntry(1), distance.f4.getVector().getEntry(2), distance.f4.getVector().getEntry(3), distance.f4.getVector().getEntry(4)), distance.f4);
         }
     }
 
-    private static class TMJoinerIn implements JoinFunction<Tuple5<String, String, String, Boolean, Double>, Tuple6<String, String, Boolean, Integer, Double, Boolean>, Tuple5<String, String, String, Boolean, Double>> {
+    private static class TMJoinerIn implements JoinFunction<Tuple6<String, String, String, Boolean, Double, SerializableVector>, Tuple6<String, String, Boolean, Integer, Double, Boolean>, Tuple6<String, String, String, Boolean, Double, SerializableVector>> {
         @Override
-        public Tuple5<String, String, String, Boolean, Double> join(Tuple5<String, String, String, Boolean, Double> tmOut, Tuple6<String, String, Boolean, Integer, Double, Boolean> marginal) throws Exception {
-            return new Tuple5<String, String, String, Boolean, Double>(tmOut.f0, tmOut.f1, tmOut.f2, tmOut.f3, tmOut.f4*marginal.f3*marginal.f4);
+        public Tuple6<String, String, String, Boolean, Double, SerializableVector> join(Tuple6<String, String, String, Boolean, Double, SerializableVector> tmOut, Tuple6<String, String, Boolean, Integer, Double, Boolean> marginal) throws Exception {
+            return new Tuple6<String, String, String, Boolean, Double, SerializableVector>(tmOut.f0, tmOut.f1, tmOut.f2, tmOut.f3, tmOut.f4*marginal.f3*marginal.f4, tmOut.f5);
         }
     }
 
@@ -469,10 +495,10 @@ public class TrafficAnalysis {
         }
     }
 
-    private static class LogitTrainer implements GroupReduceFunction<MIDT, Tuple5<String, String, String, LogitOptimizable, Boolean>> {
+    private static class LogitTrainer implements GroupReduceFunction<MIDT, Tuple4<String, String, String, LogitOptimizable>> {
 
         @Override
-        public void reduce(Iterable<MIDT> midts, Collector<Tuple5<String, String, String, LogitOptimizable, Boolean>> out) throws Exception {
+        public void reduce(Iterable<MIDT> midts, Collector<Tuple4<String, String, String, LogitOptimizable>> out) throws Exception {
             ArrayList<LogitOptimizable.TrainingData> trainingData = new ArrayList<LogitOptimizable.TrainingData>();
             Iterator<MIDT> iterator = midts.iterator();
             MIDT midt = null;
@@ -509,31 +535,74 @@ public class TrafficAnalysis {
             } catch (Throwable t) {
                 throw new Exception("Something went wrong in the optimizer. " + t.getMessage());
             }
+            if(!converged) {
+                return;
+            }
             optimizable.clear(); // push the results in the tuple
-            out.collect(new Tuple5<String, String, String, LogitOptimizable, Boolean>(midt.f0, midt.f1, midt.f2, optimizable, converged));
+            out.collect(new Tuple4<String, String, String, LogitOptimizable>(midt.f0, midt.f1, midt.f2, optimizable));
         }
     }
 
-    private static class WeightTMJoiner implements JoinFunction<Tuple5<String, String, String, Boolean, Double>, Tuple5<String, String, String, LogitOptimizable, Boolean>,
-            Tuple6<String, String, String, Double, LogitOptimizable, Boolean>> {
+    private static class WeightTMJoiner implements JoinFunction<Tuple5<String, String, String, Double, SerializableVector>, Tuple4<String, String, String, LogitOptimizable>,
+            Tuple6<String, String, String, Double, SerializableVector, LogitOptimizable>> {
 
         @Override
-        public Tuple6<String, String, String, Double, LogitOptimizable, Boolean> join(Tuple5<String, String, String, Boolean, Double> tmEntry, Tuple5<String, String, String, LogitOptimizable, Boolean> logit) throws Exception {
-            return new Tuple6<String, String, String, Double, LogitOptimizable, Boolean>(tmEntry.f0, tmEntry.f1, tmEntry.f2, tmEntry.f4, logit.f3, logit.f4);
+        public Tuple6<String, String, String, Double, SerializableVector, LogitOptimizable> join(Tuple5<String, String, String, Double, SerializableVector> tmEntry, Tuple4<String, String, String, LogitOptimizable> logit) throws Exception {
+            return new Tuple6<String, String, String, Double, SerializableVector, LogitOptimizable>(tmEntry.f0, tmEntry.f1, tmEntry.f2, tmEntry.f3, tmEntry.f4, logit.f3);
         }
     }
 
-    private static class TrafficEstimator implements CoGroupFunction<Itinerary, Tuple6<String, String, String, Double, LogitOptimizable, Boolean>,
-            Tuple10<String, String, String, String, String, String, Long, Integer, Boolean, Itinerary>> {
+    private static class ODDistanceComparator extends
+            RichCoGroupFunction<Tuple6<String, String, String, Double, SerializableVector, LogitOptimizable>,
+                    Tuple5<String, String, String, Double, SerializableVector>,
+                    Tuple5<String, String, String, Double, LogitOptimizable>> {
+
+        //private List<Tuple2<String, SerializableMatrix>> matrices = null;
 
         @Override
-        public void coGroup(Iterable<Itinerary> connections, Iterable<Tuple6<String, String, String, Double, LogitOptimizable, Boolean>> logitModel,
-                            Collector<Tuple10<String, String, String, String, String, String, Long, Integer, Boolean, Itinerary>> out) throws Exception {
-            Iterator<Tuple6<String, String, String, Double, LogitOptimizable, Boolean>> logitIter = logitModel.iterator();
+        public void open(Configuration parameters) {
+            //this.matrices = getRuntimeContext().getBroadcastVariable(INVERTED_COVARIANCE_MATRIX);
+        }
+
+        @Override
+        public void coGroup(Iterable<Tuple6<String, String, String, Double, SerializableVector, LogitOptimizable>> weightedODs,
+                            Iterable<Tuple5<String, String, String, Double, SerializableVector>> unweightedODs,
+                            Collector<Tuple5<String, String, String, Double, LogitOptimizable>> out) throws Exception {
+
+            ArrayList<Tuple6<String, String, String, Double, SerializableVector, LogitOptimizable>> weighted = new ArrayList<Tuple6<String, String, String, Double, SerializableVector, LogitOptimizable>>();
+            for(Tuple6<String, String, String, Double, SerializableVector, LogitOptimizable> w : weightedODs) {
+                weighted.add(w.copy());
+            }
+            double distance = 0.0;
+            for(Tuple5<String, String, String, Double, SerializableVector> uw : unweightedODs) {
+                double minDistance = Double.MAX_VALUE;
+                Tuple6<String, String, String, Double, SerializableVector, LogitOptimizable> tmp = null;
+                for(Tuple6<String, String, String, Double, SerializableVector, LogitOptimizable> w : weighted) {
+                    distance = uw.f4.getVector().getDistance(w.f4.getVector());
+                    if(distance < minDistance) {
+                        minDistance = distance;
+                        tmp = w;
+                    }
+                }
+                if(tmp == null) {
+                    continue;
+                }
+                out.collect(new Tuple5<String, String, String, Double, LogitOptimizable>(uw.f0, uw.f1, uw.f2, uw.f3, tmp.f5));
+            }
+        }
+    }
+
+    private static class TrafficEstimator implements CoGroupFunction<Itinerary, Tuple5<String, String, String, Double, LogitOptimizable>,
+            Tuple11<String, String, String, String, String, String, Long, Integer, Itinerary, Integer, Double>> {
+
+        @Override
+        public void coGroup(Iterable<Itinerary> connections, Iterable<Tuple5<String, String, String, Double, LogitOptimizable>> logitModel,
+                            Collector<Tuple11<String, String, String, String, String, String, Long, Integer, Itinerary, Integer, Double>> out) throws Exception {
+            Iterator<Tuple5<String, String, String, Double, LogitOptimizable>> logitIter = logitModel.iterator();
             if(!logitIter.hasNext()) {
                 return; // no model
             }
-            Tuple6<String, String, String, Double, LogitOptimizable, Boolean> logit = logitIter.next();
+            Tuple5<String, String, String, Double, LogitOptimizable> logit = logitIter.next();
             if(logitIter.hasNext()) {
                 throw new Exception("More than one logit model: " + logitIter.next().toString());
             }
@@ -544,10 +613,10 @@ public class TrafficAnalysis {
                 return; // no connections
             }
             int count = 0;
-            HashSet<Itinerary> itineraries = new HashSet<Itinerary>();
+            ArrayList<Itinerary> itineraries = new ArrayList<Itinerary>();
             int minTime = Integer.MAX_VALUE;
             while (connIter.hasNext()) {
-                Itinerary e = connIter.next();
+                Itinerary e = connIter.next().deepCopy();
                 /*if(itineraries.contains(e)) {
                     throw new Exception("Itinerary found twice:" + e.toString());
                 }*/
@@ -568,9 +637,54 @@ public class TrafficAnalysis {
                 double itineraryEstimate = LogitOptimizable.softmax(e, softmaxSum, weights, minTime)*estimate;
                 long roundedEstimate = Math.round(itineraryEstimate);
                 if(roundedEstimate > 0L) {
-                    out.collect(new Tuple10<String, String, String, String, String, String, Long, Integer, Boolean, Itinerary>(e.f0, e.f1, e.f2, e.f3, e.f4, e.f5, roundedEstimate, e.f10, logit.f5, e));
+                    out.collect(new Tuple11<String, String, String, String, String, String, Long, Integer, Itinerary, Integer, Double>(e.f0, e.f1, e.f2, e.f3, e.f4, e.f5, roundedEstimate, e.f10, e, count, logit.f3));
                 }
             }
+
+        }
+    }
+
+    private static class ODSum implements GroupReduceFunction<Tuple11<String, String, String, String, String, String, Long, Integer, Itinerary, Integer, Double>,
+            Tuple6<String, String, Integer, Integer, Long, Double>> {
+
+        @Override
+        public void reduce(Iterable<Tuple11<String, String, String, String, String, String, Long, Integer, Itinerary, Integer, Double>> iterable,
+                           Collector<Tuple6<String, String, Integer, Integer, Long, Double>> out) throws Exception {
+            Tuple6<String, String, Integer, Integer, Long, Double> result = new Tuple6<String, String, Integer, Integer, Long, Double>();
+            HashSet<String> days = new HashSet<String>(7);
+            int itinCount = 0;
+            long paxSum = 0L;
+            double estimateSum = 0.0;
+            for(Tuple11<String, String, String, String, String, String, Long, Integer, Itinerary, Integer, Double> t : iterable) {
+                if(!days.contains(t.f2)) {
+                    days.add(t.f2);
+                    estimateSum += t.f10;
+                }
+                result.f0 = t.f0;
+                result.f1 = t.f1;
+                paxSum += t.f6;
+                itinCount++;
+                result.f3 = t.f9;
+            }
+            result.f2 = itinCount;
+            result.f4 = paxSum;
+            result.f5 = estimateSum;
+            out.collect(result);
+        }
+    }
+
+    private static class LowerBoundExtractor implements MapFunction<MIDT, Tuple5<String, String, String, Integer, Integer>> {
+        @Override
+        public Tuple5<String, String, String, Integer, Integer> map(MIDT midt) throws Exception {
+            return new Tuple5<String, String, String, Integer, Integer>(midt.f0, midt.f1, midt.f2, midt.f11, 0);
+        }
+    }
+
+    private static class CovarianceMatrix implements GroupReduceFunction<Tuple9<String, String, String, Boolean, Double, Integer, Integer, Double, Integer>,
+            Tuple2<String, SerializableMatrix>> {
+
+        @Override
+        public void reduce(Iterable<Tuple9<String, String, String, Boolean, Double, Integer, Integer, Double, Integer>> iterable, Collector<Tuple2<String, SerializableMatrix>> collector) throws Exception {
 
         }
     }
@@ -591,8 +705,23 @@ public class TrafficAnalysis {
         return d;
     }
 
-    private static double decayingFunction(double distance) {
-        return 1.0/Math.sqrt(distance);
+    private static double decayingFunction(double minTravelTime, double maxTravelTime, double avgTravelTime, double distance, double count) {
+        /*double mu = 3.3;
+        double sigma = 0.5;
+        double sigma2 = Math.pow(sigma, 2.0);
+        double x = distance;
+        double numerator = Math.exp((-Math.pow(Math.log(x)-mu, 2.0))/2.0*sigma2);
+        double denominator = x*sigma*Math.sqrt(2.0*Math.PI);
+        return numerator/denominator;*/
+        return 1.0/(avgTravelTime*distance);
+        //return Math.exp(-2*(Math.log(distance)-1.8)*(Math.log(distance)-1.8));
+    }
+
+    private static double mahalanobisDistance(ArrayRealVector x, ArrayRealVector y, Array2DRowRealMatrix Sinv) {
+        ArrayRealVector xmy = x.subtract(y);
+        RealVector SinvXmy = Sinv.operate(xmy);
+        double result = xmy.dotProduct(SinvXmy);
+        return Math.sqrt(result);
     }
 
 }

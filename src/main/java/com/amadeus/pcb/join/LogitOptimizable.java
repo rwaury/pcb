@@ -5,7 +5,7 @@ import org.apache.flink.api.java.tuple.Tuple4;
 
 import java.util.ArrayList;
 
-public class LogitOptimizable extends Tuple4<Double, Double, Double, Double> implements Optimizable.ByGradientValue {
+public class LogitOptimizable extends SerializableVector implements Optimizable.ByGradientValue {
 
     private static int FEATURE_COUNT = 3;
 
@@ -14,9 +14,9 @@ public class LogitOptimizable extends Tuple4<Double, Double, Double, Double> imp
     private double[] valueCache = null;
 
     public LogitOptimizable() {
-        super();
-        for(int i = 0; i < this.getArity(); i++) {
-            this.setField(1.0, i);
+        super(FEATURE_COUNT+1);
+        for(int i = 0; i < this.getVector().getDimension(); i++) {
+            this.getVector().setEntry(i, 1.0);
         }
     }
 
@@ -25,31 +25,27 @@ public class LogitOptimizable extends Tuple4<Double, Double, Double, Double> imp
         for(TrainingData t : this.trainingData) {
             t.features[1] = t.features[1]/(double)minTravelTime;
         }
-        this.valueCache = new double[this.getArity()];
-        for(int i = 0; i < this.getArity(); i++) {
-            valueCache[i] = this.getField(i);
+        this.valueCache = new double[this.getVector().getDimension()];
+        for(int i = 0; i < this.getVector().getDimension(); i++) {
+            valueCache[i] = this.getVector().getEntry(i);
         }
     }
 
     public void clear() {
         this.trainingData.clear();
         for(int i = 0; i < this.valueCache.length; i++) {
-            this.setField(this.valueCache[i], i);
+            this.getVector().setEntry(i, this.valueCache[i]);
         }
         this.valueCache = null;
     }
 
     public double[] asArray() {
-        double[] weights = new double[this.getArity()];
-        for(int i = 0; i < this.getArity(); i++) {
-            weights[i] = this.getField(i);
-        }
-        return weights;
+        return this.getVector().toArray();
     }
 
     @Override
     public void getValueGradient(double[] gradient) {
-        assert  gradient.length == this.getArity();
+        assert  gradient.length == this.getVector().getDimension();
         double[] avg = new double[gradient.length];
         for(int i = 0; i < this.trainingData.size(); i++) {
             TrainingData ti = this.trainingData.get(i);
@@ -81,7 +77,7 @@ public class LogitOptimizable extends Tuple4<Double, Double, Double, Double> imp
 
     @Override
     public int getNumParameters() {
-        return this.getArity();
+        return FEATURE_COUNT+1;
     }
 
     @Override
