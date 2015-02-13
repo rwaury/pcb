@@ -24,11 +24,11 @@ import java.util.*;
 
 public class TrafficAnalysis {
 
-    private static final double SLF = 0.795;
+    private static final double SLF = 1.0;//0.795;
 
     private static final double WAITING_FACTOR = 1.0;
 
-    private static final int MAX_ITERATIONS = 10;
+    private static final int MAX_ITERATIONS = 8;
 
     private static final double OPTIMIZER_TOLERANCE = 0.000001;
 
@@ -39,12 +39,43 @@ public class TrafficAnalysis {
 
     private static String outputPath = "hdfs:///user/rwaury/output2/flights/";
 
+    private static String AP_COUNTRY_MAPPING = "AirportCountryMappingBroadcastSet";
+
     private static String INVERTED_COVARIANCE_MATRIX = "InvertedCovarianceMatrixBroadcastSet";
 
     private static final int OD_FEATURE_COUNT = 5;
 
     public static void main(String[] args) throws Exception {
         ExecutionEnvironment env = ExecutionEnvironment.getExecutionEnvironment();
+
+        DataSet<Tuple4<String, String, String, String>> airportCountryNR = env.readTextFile("hdfs:///user/rwaury/input2/ori_por_public.csv").setParallelism(1)
+                .flatMap(new AirportCountryExtractor()).setParallelism(1);
+
+        DataSet<Tuple2<String, String>> regionInfo = env.readTextFile("hdfs:///user/rwaury/input2/ori_country_region_info.csv").map(new FlightConnectionJoiner.RegionExtractor());
+        DataSet<Tuple4<String, String, String, String>> airportCountry = airportCountryNR.join(regionInfo).where(0).equalTo(0).with(new RegionJoiner());
+
+        DataSet<String> midtStrings = env.readTextFile("hdfs:///user/rwaury/input2/MIDTTotalHits.csv");
+
+        DataSet<MIDT> midt = midtStrings.flatMap(new MIDTParser()).groupBy(0,1,2,3,4,5,6,7).reduceGroup(new MIDTGrouper());
+        DataSet<Tuple5<String, String, String, Integer, Integer>> ODBounds = midt.map(new LowerBoundExtractor()).groupBy(0,1,2).sum(3).andSum(4);
+        ODBounds.writeAsCsv(outputPath + "ODBounds", "\n", ",", FileSystem.WriteMode.OVERWRITE);
+
+        DataSet<Tuple5<String, String, Boolean, Integer, Integer>> APBoundsAgg = midtStrings.flatMap(new MIDTCapacityEmitter()).withBroadcastSet(airportCountry, AP_COUNTRY_MAPPING);
+
+        DataSet<Tuple5<String, String, Boolean, Integer, Integer>> APBounds = APBoundsAgg.groupBy(0,1,2).sum(3).andSum(4);
+
+
+        /*DataSet<Tuple4<String, String, Integer, Integer>> APBounds = ODBounds.flatMap(new FlatMapFunction<Tuple5<String, String, String, Integer, Integer>, Tuple4<String, String, Integer, Integer>>() {
+            @Override
+            public void flatMap(Tuple5<String, String, String, Integer, Integer> odbound, Collector<Tuple4<String, String, Integer, Integer>> out) throws Exception {
+                Tuple4<String, String, Integer, Integer> outgoing = new Tuple4<String, String, Integer, Integer>(odbound.f0, odbound.f2, odbound.f3, 0);
+                Tuple4<String, String, Integer, Integer> incoming = new Tuple4<String, String, Integer, Integer>(odbound.f1, odbound.f2, 0, odbound.f3);
+                out.collect(outgoing);
+                out.collect(incoming);
+            }
+        }).groupBy(0,1).sum(2).andSum(3);*/
+
+        APBounds.writeAsCsv(outputPath + "APBounds", "\n", ",", FileSystem.WriteMode.OVERWRITE);
 
         DataSet<Flight> nonStopConnections = env.readFile(new FlightOutput.NonStopFullInputFormat(), outputPath + "oneFull");
 
@@ -62,8 +93,7 @@ public class TrafficAnalysis {
                 Date date = new Date(flight.getDepartureTimestamp());
                 String dayString = format.format(date);
                 boolean isInternational = !flight.getOriginCountry().equals(flight.getDestinationCountry());
-                int roundedCapacity = flight.getMaxCapacity();
-                int capacity = (roundedCapacity > 0) ? roundedCapacity : 1;
+                int capacity = flight.getMaxCapacity();
                 Tuple5<String, String, Boolean, Integer, Integer> outgoing = new Tuple5<String, String, Boolean, Integer, Integer>
                         (flight.getOriginAirport(), dayString, isInternational, capacity, 0);
                 Tuple5<String, String, Boolean, Integer, Integer> incoming = new Tuple5<String, String, Boolean, Integer, Integer>
@@ -74,7 +104,7 @@ public class TrafficAnalysis {
         });
 
         // in and out loads of airports per day and as domestic and international (boolean flag)
-        DataSet<Tuple6<String, String, Boolean, Integer, Double, Boolean>> outgoingMarginals = inOutCapa.groupBy(0,1,2).reduceGroup(new GroupReduceFunction<Tuple5<String, String, Boolean, Integer, Integer>, Tuple6<String, String, Boolean, Integer, Double, Boolean>>() {
+        DataSet<Tuple6<String, String, Boolean, Integer, Double, Boolean>> outgoingMarginalsAgg = inOutCapa.groupBy(0,1,2).reduceGroup(new GroupReduceFunction<Tuple5<String, String, Boolean, Integer, Integer>, Tuple6<String, String, Boolean, Integer, Double, Boolean>>() {
             @Override
             public void reduce(Iterable<Tuple5<String, String, Boolean, Integer, Integer>> tuple7s,
                                Collector<Tuple6<String, String, Boolean, Integer, Double, Boolean>> out) throws Exception {
@@ -97,7 +127,7 @@ public class TrafficAnalysis {
             }
         });
 
-        DataSet<Tuple6<String, String, Boolean, Integer, Double, Boolean>> incomingMarginals = inOutCapa.groupBy(0,1,2).reduceGroup(new GroupReduceFunction<Tuple5<String, String, Boolean, Integer, Integer>, Tuple6<String, String, Boolean, Integer, Double, Boolean>>() {
+        DataSet<Tuple6<String, String, Boolean, Integer, Double, Boolean>> incomingMarginalsAgg = inOutCapa.groupBy(0,1,2).reduceGroup(new GroupReduceFunction<Tuple5<String, String, Boolean, Integer, Integer>, Tuple6<String, String, Boolean, Integer, Double, Boolean>>() {
             @Override
             public void reduce(Iterable<Tuple5<String, String, Boolean, Integer, Integer>> tuple7s,
                                Collector<Tuple6<String, String, Boolean, Integer, Double, Boolean>> out) throws Exception {
@@ -117,6 +147,24 @@ public class TrafficAnalysis {
                 }
                 result.f3 = (int)Math.round(SLF*result.f3);
                 out.collect(result);
+            }
+        });
+
+        DataSet<Tuple6<String, String, Boolean, Integer, Double, Boolean>> outgoingMarginals = outgoingMarginalsAgg.join(APBounds, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where(0,1,2).equalTo(0,1,2).with(
+                        new JoinFunction<Tuple6<String, String, Boolean, Integer, Double, Boolean>, Tuple5<String, String, Boolean, Integer, Integer>, Tuple6<String, String, Boolean, Integer, Double, Boolean>>() {
+            @Override
+            public Tuple6<String, String, Boolean, Integer, Double, Boolean> join(Tuple6<String, String, Boolean, Integer, Double, Boolean> marginal, Tuple5<String, String, Boolean, Integer, Integer> midtBound) throws Exception {
+                int estimateResidual = Math.max(marginal.f3 - midtBound.f3, 0);
+                return new Tuple6<String, String, Boolean, Integer, Double, Boolean>(marginal.f0, marginal.f1, marginal.f2, estimateResidual, marginal.f4, marginal.f5);
+            }
+        });
+
+        DataSet<Tuple6<String, String, Boolean, Integer, Double, Boolean>> incomingMarginals = incomingMarginalsAgg.join(APBounds, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where(0,1,2).equalTo(0,1,2).with(
+                new JoinFunction<Tuple6<String, String, Boolean, Integer, Double, Boolean>, Tuple5<String, String, Boolean, Integer, Integer>, Tuple6<String, String, Boolean, Integer, Double, Boolean>>() {
+            @Override
+            public Tuple6<String, String, Boolean, Integer, Double, Boolean> join(Tuple6<String, String, Boolean, Integer, Double, Boolean> marginal, Tuple5<String, String, Boolean, Integer, Integer> midtBound) throws Exception {
+                int estimateResidual = Math.max(marginal.f3 - midtBound.f4, 0);
+                return new Tuple6<String, String, Boolean, Integer, Double, Boolean>(marginal.f0, marginal.f1, marginal.f2, estimateResidual, marginal.f4, marginal.f5);
             }
         });
 
@@ -256,33 +304,47 @@ public class TrafficAnalysis {
                 .join(result.filter(new IncomingFilter()), JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where(1,2,3).equalTo(0,1,2).with(new TMJoinerIn())
                 .project(0, 1, 2, 4, 5);
 
+        DataSet<Tuple5<String, String, String, Double, SerializableVector>> TMWithMIDT = trafficMatrix.coGroup(ODBounds).where(0,1,2).equalTo(0,1,2).with(
+                new CoGroupFunction<Tuple5<String, String, String, Double, SerializableVector>, Tuple5<String, String, String, Integer, Integer>, Tuple5<String, String, String, Double, SerializableVector>>() {
+            @Override
+            public void coGroup(Iterable<Tuple5<String, String, String, Double, SerializableVector>> tm, Iterable<Tuple5<String, String, String, Integer, Integer>> midtBound, Collector<Tuple5<String, String, String, Double, SerializableVector>> out) throws Exception {
+                Iterator<Tuple5<String, String, String, Integer, Integer>> midtIter = midtBound.iterator();
+                Iterator<Tuple5<String, String, String, Double, SerializableVector>> tmIter = tm.iterator();
+                if(!midtIter.hasNext()) {
+                    out.collect(tmIter.next());
+                    if(tmIter.hasNext()) {
+                        throw new Exception("More than one TM entry: " + tmIter.next().toString());
+                    }
+                } else {
+                    Tuple5<String, String, String, Integer, Integer> midt = midtIter.next();
+                    if(tmIter.hasNext()) {
+                        Tuple5<String, String, String, Double, SerializableVector> tmEntry = tmIter.next();
+                        out.collect(new Tuple5<String, String, String, Double, SerializableVector>(tmEntry.f0, tmEntry.f1, tmEntry.f2, tmEntry.f3 + (double)midt.f3, tmEntry.f4));
+                    }
+                    if(tmIter.hasNext()) {
+                        throw new Exception("More than one TM entry: " + tmIter.next().toString());
+                    }
+                    if(midtIter.hasNext()) {
+                        throw new Exception("More than one MIDT bound: " + midtIter.next().toString());
+                    }
+                }
+            }
+        });
 
-        trafficMatrix/*.groupBy(2).sortGroup(3, Order.DESCENDING).first(100)*/.writeAsCsv(outputPath + "trafficMatrix", "\n", ",", FileSystem.WriteMode.OVERWRITE);
+
+        TMWithMIDT.project(0,1,2,3).writeAsCsv(outputPath + "trafficMatrix", "\n", ",", FileSystem.WriteMode.OVERWRITE);
 
         DataSet<Itinerary> nonStopItineraries = nonStopConnections.flatMap(new FlightExtractor1());
         DataSet<Itinerary> twoLegItineraries = twoLegConnections.flatMap(new FlightExtractor2());
         DataSet<Itinerary> threeLegItineraries = threeLegConnections.flatMap(new FlightExtractor3());
         DataSet<Itinerary> itineraries = nonStopItineraries.union(twoLegItineraries).union(threeLegItineraries);
 
-        /*itineraries.filter(new FilterFunction<Itinerary>() {
-            @Override
-            public boolean filter(Itinerary itinerary) throws Exception {
-                return itinerary.f2.equals("06052014");
-            }
-        }).writeAsCsv(outputPath + "itineraries", "\n", ",", FileSystem.WriteMode.OVERWRITE);*/
-
-
-        DataSet<MIDT> midt = env.readTextFile("hdfs:///user/rwaury/input2/MIDTTotalHits.csv").flatMap(new MIDTParser()).groupBy(0,1,2,3,4,5,6,7).reduceGroup(new MIDTGrouper());
-        DataSet<Tuple5<String, String, String, Integer, Integer>> bounds = midt.map(new LowerBoundExtractor());
-        bounds.writeAsCsv(outputPath + "bounds", "\n", ",", FileSystem.WriteMode.OVERWRITE);
         //midt.groupBy(0,1,2).sortGroup(0, Order.ASCENDING).first(10000).writeAsCsv(outputPath + "groupedMIDT", "\n", ",", FileSystem.WriteMode.OVERWRITE);
         DataSet<Tuple4<String, String, String, LogitOptimizable>> trainedLogit = midt.groupBy(0,1,2).reduceGroup(new LogitTrainer());
         //trainedLogit.writeAsCsv(outputPath + "logitResult", "\n", ",", FileSystem.WriteMode.OVERWRITE);
 
-        DataSet<Tuple6<String, String, String, Double, SerializableVector, LogitOptimizable>> TMWithWeights = trafficMatrix
+        DataSet<Tuple6<String, String, String, Double, SerializableVector, LogitOptimizable>> TMWithWeights = TMWithMIDT
                 .join(trainedLogit, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where(0,1,2).equalTo(0,1,2).with(new WeightTMJoiner());
-
-
 
         //TMWithWeights.groupBy(0,1,2).sortGroup(2, Order.ASCENDING).first(10000000).writeAsCsv(outputPath + "tmWeights", "\n", ",", FileSystem.WriteMode.OVERWRITE);
 
@@ -294,7 +356,7 @@ public class TrafficAnalysis {
 
         estimate.groupBy(0,1).sortGroup(6, Order.DESCENDING).first(1000000000).writeAsCsv(outputPath + "ItineraryEstimate", "\n", ",", FileSystem.WriteMode.OVERWRITE);
 
-        estimate.groupBy(0,1).reduceGroup(new ODSum()).writeAsCsv(outputPath + "ODSum", "\n", ",", FileSystem.WriteMode.OVERWRITE);
+        estimate.groupBy(0,1).reduceGroup(new ODSum()).writeAsCsv(outputPath + "ODSum", "\n", ",", FileSystem.WriteMode.OVERWRITE).setParallelism(1);
 
         env.execute("TrafficAnalysis");
     }
@@ -302,15 +364,22 @@ public class TrafficAnalysis {
     private static class KJoiner implements JoinFunction<Tuple5<String, String, String, Boolean, SerializableVector>, Tuple6<String, String, Boolean, Integer, Double, Boolean>, Tuple5<String, String, String, Boolean, Double>> {
         @Override
         public Tuple5<String, String, String, Boolean, Double> join(Tuple5<String, String, String, Boolean, SerializableVector> distance, Tuple6<String, String, Boolean, Integer, Double, Boolean> marginal) throws Exception {
-            return new Tuple5<String, String, String, Boolean, Double>(distance.f0, distance.f1, distance.f2, distance.f3,
-                    marginal.f3*marginal.f4*decayingFunction(distance.f4.getVector().getEntry(0), distance.f4.getVector().getEntry(1), distance.f4.getVector().getEntry(2), distance.f4.getVector().getEntry(3), distance.f4.getVector().getEntry(4)));
+            double KFraction = marginal.f3*marginal.f4*decayingFunction(distance.f4.getVector().getEntry(0), distance.f4.getVector().getEntry(1), distance.f4.getVector().getEntry(2), distance.f4.getVector().getEntry(3), distance.f4.getVector().getEntry(4));
+            if(Double.isNaN(KFraction) || KFraction < 0.0) {
+                KFraction = 0.0;
+            }
+            return new Tuple5<String, String, String, Boolean, Double>(distance.f0, distance.f1, distance.f2, distance.f3, KFraction);
         }
     }
 
     private static class KUpdater implements JoinFunction<Tuple5<String, String, String, Boolean, Double>, Tuple6<String, String, Boolean, Integer, Double, Boolean>, Tuple6<String, String, Boolean, Integer, Double, Boolean>> {
         @Override
         public Tuple6<String, String, Boolean, Integer, Double, Boolean> join(Tuple5<String, String, String, Boolean, Double> Ksum, Tuple6<String, String, Boolean, Integer, Double, Boolean> marginal) throws Exception {
-            marginal.f4 = 1.0/Ksum.f4;
+            double sum = Ksum.f4;
+            //if(Double.isNaN(sum) || sum < 0.0) {
+            //    sum = 1.0;
+            //}
+            marginal.f4 = 1.0/sum;
             return marginal;
         }
     }
@@ -332,15 +401,22 @@ public class TrafficAnalysis {
     private static class TMJoinerOut implements JoinFunction<Tuple5<String, String, String, Boolean, SerializableVector>, Tuple6<String, String, Boolean, Integer, Double, Boolean>, Tuple6<String, String, String, Boolean, Double, SerializableVector>> {
         @Override
         public Tuple6<String, String, String, Boolean, Double, SerializableVector> join(Tuple5<String, String, String, Boolean, SerializableVector> distance, Tuple6<String, String, Boolean, Integer, Double, Boolean> marginal) throws Exception {
-            return new Tuple6<String, String, String, Boolean, Double, SerializableVector>(distance.f0, distance.f1, distance.f2, distance.f3,
-                    marginal.f3*marginal.f4*decayingFunction(distance.f4.getVector().getEntry(0), distance.f4.getVector().getEntry(1), distance.f4.getVector().getEntry(2), distance.f4.getVector().getEntry(3), distance.f4.getVector().getEntry(4)), distance.f4);
+            double partialDist = marginal.f3*marginal.f4*decayingFunction(distance.f4.getVector().getEntry(0), distance.f4.getVector().getEntry(1), distance.f4.getVector().getEntry(2), distance.f4.getVector().getEntry(3), distance.f4.getVector().getEntry(4));
+            if(Double.isNaN(partialDist) || partialDist < 0.0) {
+                partialDist = 0.0;
+            }
+            return new Tuple6<String, String, String, Boolean, Double, SerializableVector>(distance.f0, distance.f1, distance.f2, distance.f3, partialDist, distance.f4);
         }
     }
 
     private static class TMJoinerIn implements JoinFunction<Tuple6<String, String, String, Boolean, Double, SerializableVector>, Tuple6<String, String, Boolean, Integer, Double, Boolean>, Tuple6<String, String, String, Boolean, Double, SerializableVector>> {
         @Override
         public Tuple6<String, String, String, Boolean, Double, SerializableVector> join(Tuple6<String, String, String, Boolean, Double, SerializableVector> tmOut, Tuple6<String, String, Boolean, Integer, Double, Boolean> marginal) throws Exception {
-            return new Tuple6<String, String, String, Boolean, Double, SerializableVector>(tmOut.f0, tmOut.f1, tmOut.f2, tmOut.f3, tmOut.f4*marginal.f3*marginal.f4, tmOut.f5);
+            double fullDistance = tmOut.f4*marginal.f3*marginal.f4;
+            if(Double.isNaN(fullDistance) || fullDistance < 0.0) {
+                fullDistance = 0.0;
+            }
+            return new Tuple6<String, String, String, Boolean, Double, SerializableVector>(tmOut.f0, tmOut.f1, tmOut.f2, tmOut.f3, fullDistance, tmOut.f5);
         }
     }
 
@@ -405,6 +481,68 @@ public class TrafficAnalysis {
             out.collect(new Itinerary(flight.f0.getOriginAirport(), flight.f2.getDestinationAirport(), dayString,
                     flight.f0.getAirline() + flight.f0.getFlightNumber(), flight.f1.getAirline() + flight.f1.getFlightNumber(), flight.f2.getAirline() + flight.f2.getFlightNumber(), "", "",
                     directDistance, travelledDistance, travelTime, waitingTime, legCount, maxCapacity, 0, ""));
+        }
+    }
+
+    private static class MIDTCapacityEmitter extends RichFlatMapFunction<String, Tuple5<String, String, Boolean, Integer, Integer>> {
+
+        private SimpleDateFormat format = new SimpleDateFormat("ddMMyyyy");
+        private HashMap<String, String> APToCountry;
+
+        @Override
+        public void open(Configuration parameters) {
+            Collection<Tuple4<String, String, String, String>> broadcastSet = this.getRuntimeContext().getBroadcastVariable(AP_COUNTRY_MAPPING);
+            this.APToCountry = new HashMap<String, String>(broadcastSet.size());
+            for(Tuple4<String, String, String, String> t : broadcastSet) {
+                this.APToCountry.put(t.f0, t.f2);
+            }
+        }
+
+        @Override
+        public void flatMap(String s, Collector<Tuple5<String, String, Boolean, Integer, Integer>> out) throws Exception {
+            if(s.startsWith("$")) {
+                return;
+            }
+            String[] tmp = s.split(";");
+            if(tmp.length < 15) {
+                return;
+            }
+            if(APToCountry == null) {
+                throw new Exception("HashMap not initialized");
+            }
+            int pax = Integer.parseInt(tmp[2].trim());
+            int segmentCount = Integer.parseInt(tmp[3].trim());
+            long departureDay = Long.parseLong(tmp[11].trim())-1;
+            long departureTimestamp = firstPossibleTimestamp + (departureDay*24L*60L*60L*1000L);
+            Date date = new Date(departureTimestamp);
+            String dayString = format.format(date);
+            if(departureDay > 6) {
+                throw new Exception("Value error: " + s);
+            }
+            boolean isInternational = false;
+            int offset = 9;
+            int counter = 0;
+            int index = 6;
+            while(counter < segmentCount) {
+                String apOut = tmp[index].trim();
+                String apIn = tmp[index+1].trim();
+                index += offset;
+                counter++;
+                String outCountry = APToCountry.get(apOut);
+                String inCountry = APToCountry.get(apIn);
+                if(outCountry != null && inCountry != null) {
+                    isInternational = !outCountry.equals(inCountry);
+                } else {
+                    continue;
+                    //isInternational = false; // usually it cannot find train stations
+                }
+                Tuple5<String, String, Boolean, Integer, Integer> tOut =
+                        new Tuple5<String, String, Boolean, Integer, Integer>(apOut, dayString, isInternational, pax, 0);
+                Tuple5<String, String, Boolean, Integer, Integer> tIn =
+                        new Tuple5<String, String, Boolean, Integer, Integer>(apIn, dayString, isInternational, 0, pax);
+                out.collect(tOut);
+                out.collect(tIn);
+            }
         }
     }
 
@@ -495,6 +633,13 @@ public class TrafficAnalysis {
         }
     }
 
+    private static class LowerBoundExtractor implements MapFunction<MIDT, Tuple5<String, String, String, Integer, Integer>> {
+        @Override
+        public Tuple5<String, String, String, Integer, Integer> map(MIDT midt) throws Exception {
+            return new Tuple5<String, String, String, Integer, Integer>(midt.f0, midt.f1, midt.f2, midt.f11, 0);
+        }
+    }
+
     private static class LogitTrainer implements GroupReduceFunction<MIDT, Tuple4<String, String, String, LogitOptimizable>> {
 
         @Override
@@ -552,17 +697,17 @@ public class TrafficAnalysis {
         }
     }
 
-    private static class ODDistanceComparator extends
-            RichCoGroupFunction<Tuple6<String, String, String, Double, SerializableVector, LogitOptimizable>,
+    private static class ODDistanceComparator implements
+            CoGroupFunction<Tuple6<String, String, String, Double, SerializableVector, LogitOptimizable>,
                     Tuple5<String, String, String, Double, SerializableVector>,
                     Tuple5<String, String, String, Double, LogitOptimizable>> {
 
         //private List<Tuple2<String, SerializableMatrix>> matrices = null;
 
-        @Override
+        /*@Override
         public void open(Configuration parameters) {
             //this.matrices = getRuntimeContext().getBroadcastVariable(INVERTED_COVARIANCE_MATRIX);
-        }
+        }*/
 
         @Override
         public void coGroup(Iterable<Tuple6<String, String, String, Double, SerializableVector, LogitOptimizable>> weightedODs,
@@ -673,19 +818,54 @@ public class TrafficAnalysis {
         }
     }
 
-    private static class LowerBoundExtractor implements MapFunction<MIDT, Tuple5<String, String, String, Integer, Integer>> {
-        @Override
-        public Tuple5<String, String, String, Integer, Integer> map(MIDT midt) throws Exception {
-            return new Tuple5<String, String, String, Integer, Integer>(midt.f0, midt.f1, midt.f2, midt.f11, 0);
-        }
-    }
-
     private static class CovarianceMatrix implements GroupReduceFunction<Tuple9<String, String, String, Boolean, Double, Integer, Integer, Double, Integer>,
             Tuple2<String, SerializableMatrix>> {
 
         @Override
         public void reduce(Iterable<Tuple9<String, String, String, Boolean, Double, Integer, Integer, Double, Integer>> iterable, Collector<Tuple2<String, SerializableMatrix>> collector) throws Exception {
 
+        }
+    }
+
+    public static class AirportCountryExtractor implements FlatMapFunction<String, Tuple4<String, String, String, String>> {
+
+        String[] tmp = null;
+        String from = null;
+        String until = null;
+
+        @Override
+        public void flatMap(String value, Collector<Tuple4<String, String, String, String>> out) throws Exception {
+            tmp = value.split("\\^");
+            if (tmp[0].trim().startsWith("#")) {
+                // header
+                return;
+            }
+            if (!tmp[41].trim().equals("A")) {
+                // not an airport
+                return;
+            }
+            from = tmp[13].trim();
+            until = tmp[14].trim();
+            if (!until.equals("")) {
+                // expired
+                return;
+            }
+            String iataCode = tmp[0].trim();
+            String regionCode = "";
+            String countryCode = tmp[16].trim();
+            String stateCode = tmp[40].trim();
+            out.collect(new Tuple4<String, String, String, String>(iataCode, regionCode, countryCode, stateCode));
+        }
+    }
+
+    public static class RegionJoiner implements JoinFunction<Tuple4<String, String, String, String>,
+            Tuple2<String, String>, Tuple4<String, String, String, String>> {
+
+        @Override
+        public Tuple4<String, String, String, String>
+        join(Tuple4<String, String, String, String> first, Tuple2<String, String> second) throws Exception {
+            first.f1 = second.f1;
+            return first;
         }
     }
 
@@ -713,7 +893,7 @@ public class TrafficAnalysis {
         double numerator = Math.exp((-Math.pow(Math.log(x)-mu, 2.0))/2.0*sigma2);
         double denominator = x*sigma*Math.sqrt(2.0*Math.PI);
         return numerator/denominator;*/
-        return 1.0/(avgTravelTime*distance);
+        return 1.0/Math.sqrt(minTravelTime*avgTravelTime*distance);
         //return Math.exp(-2*(Math.log(distance)-1.8)*(Math.log(distance)-1.8));
     }
 
