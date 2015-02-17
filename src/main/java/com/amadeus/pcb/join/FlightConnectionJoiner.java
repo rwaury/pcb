@@ -33,7 +33,7 @@ public class FlightConnectionJoiner {
     public static final long END = 1399852800000L;//1401580800000L;//1399507200000L;//1399020800000L;//
 
     public static final long WEEK_START = 1399248000000L;
-    public static final long WEEK_END = 1399852800000L;
+    public static final long WEEK_END = 1399852799000L;//1399852800000L;
 
     public static final long MCT_MIN = 10L;
     //public static final long MCT_MAX = 551L;
@@ -200,6 +200,14 @@ public class FlightConnectionJoiner {
         String from = null;
         String until = null;
 
+        private final static ArrayList<String> countriesWithStates = new ArrayList<String>() {{
+            add("AR");
+            add("AU");
+            add("BR");
+            add("CA");
+            add("US");
+        }};
+
         @Override
         public void flatMap(String value, Collector<Tuple7<String, String, String, String, String, Double, Double>> out) throws Exception {
             tmp = value.split("\\^");
@@ -229,7 +237,12 @@ public class FlightConnectionJoiner {
             String iataCode = tmp[0].trim();
             String cityCode = tmp[36].trim();
             String countryCode = tmp[16].trim();
-            String stateCode = tmp[40].trim();
+            String stateCode;
+            if (countriesWithStates.contains(countryCode)) {
+                stateCode = tmp[40].trim();
+            } else {
+                stateCode = "";
+            }
             out.collect(new Tuple7<String, String, String, String, String, Double, Double>(iataCode, cityCode, stateCode, countryCode, "", latitude, longitude));
         }
     }
@@ -2153,7 +2166,7 @@ public class FlightConnectionJoiner {
         double legDistanceSum = 0.0;
         legDistanceSum += dist(originLatitude, originLongitude, hubLatitude, hubLongitude);
         legDistanceSum += dist(hubLatitude, hubLongitude, destLatitude, destLongitude);
-        return (legDistanceSum / ODDist) <= computeMaxGeoDetour(ODDist);
+        return (legDistanceSum / ODDist) <= computeMaxGeoDetour(ODDist, false);
     }
 
     /**
@@ -2179,11 +2192,15 @@ public class FlightConnectionJoiner {
         legDistanceSum += dist(originLatitude, originLongitude, hub1Latitude, hub1Longitude);
         legDistanceSum += dist(hub1Latitude, hub1Longitude, hub2Latitude, hub2Longitude);
         legDistanceSum += dist(hub2Latitude, hub2Longitude, destLatitude, destLongitude);
-        return (legDistanceSum / ODDist) <= computeMaxGeoDetour(ODDist);
+        return (legDistanceSum / ODDist) <= computeMaxGeoDetour(ODDist, true);
     }
 
-    private static double computeMaxGeoDetour(double ODDist) {
-        return Math.min(1.5, -0.365 * Math.log(ODDist) + 4.8);
+    private static double computeMaxGeoDetour(double ODDist, boolean isThreeLeg) {
+        if(isThreeLeg) {
+            return Math.min(1.5, -0.365 * Math.log(ODDist) + 4.8);
+        } else {
+            return Math.min(2.5, -0.365 * Math.log(ODDist) + 4.8);
+        }
     }
 
     private static long computeMaxCT(double ODDist) {
