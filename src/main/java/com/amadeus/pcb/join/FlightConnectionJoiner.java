@@ -21,7 +21,7 @@ public class FlightConnectionJoiner {
 
     public static final Logger LOG = LoggerFactory.getLogger(FlightConnectionJoiner.class);
 
-    private static String schedulePath = "hdfs:///user/rwaury/input2/all_catalog_140410.txt";
+    private static String schedulePath = "hdfs:///user/rwaury/input2/all_catalog_140417.txt";
     private static String oriPath = "hdfs:///user/rwaury/input2/ori_por_public.csv";
     private static String regionPath = "hdfs:///user/rwaury/input2/ori_country_region_info.csv";
     private static String defaultCapacityPath = "hdfs:///user/rwaury/input2/default_capacities.csv";
@@ -29,8 +29,8 @@ public class FlightConnectionJoiner {
     private static String mctPath = "hdfs:///user/rwaury/input2/mct.csv";
     private static String outputPath = "hdfs:///user/rwaury/output2/flights/";
 
-    public static final long START = 1399248000000L;//1398902400000L;//1398902400000L;
-    public static final long END = 1399852800000L;//1401580800000L;//1399507200000L;//1399020800000L;//
+    public static final long START = 1399248000000L;
+    public static final long END = 1399852799000L;
 
     public static final long WEEK_START = 1399248000000L;
     public static final long WEEK_END = 1399852799000L;//1399852800000L;

@@ -152,8 +152,8 @@ public class LogitOptimizable extends SerializableVector implements Optimizable.
         }
         double[] features = new double[FEATURE_COUNT+1];
         features[0] = 1.0; // w0 + w1x1 + ...
-        features[1] = iter.f9/minTime;
-        features[2] = iter.f10/iter.f9;
+        features[1] = iter.f10/minTime;
+        features[2] = iter.f11/iter.f10;
         features[3] = (double) iter.f12;
         return features;
     }
