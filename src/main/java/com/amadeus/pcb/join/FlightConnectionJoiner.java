@@ -669,12 +669,27 @@ public class FlightConnectionJoiner {
         }
     }
 
-    public static class CapacityJoiner implements JoinFunction<Flight, Tuple3<String, String, Integer>, Flight> {
+    public static class CapacityGrouper implements CoGroupFunction<Flight, Tuple3<String, String, Integer>, Flight> {
 
         @Override
-        public Flight join(Flight first, Tuple3<String, String, Integer> second) throws Exception {
-            first.setMaxCapacity(second.f2);
-            return first;
+        public void coGroup(Iterable<Flight> flights, Iterable<Tuple3<String, String, Integer>> cap, Collector<Flight> out) throws Exception {
+            Iterator<Flight> flightIter = flights.iterator();
+            Iterator<Tuple3<String, String, Integer>> capIter = cap.iterator();
+            if(capIter.hasNext()) {
+                Tuple3<String, String, Integer> newCap = capIter.next();
+                while(flightIter.hasNext()) {
+                    Flight flight = flightIter.next();
+                    flight.setMaxCapacity(newCap.f2);
+                    out.collect(flight);
+                }
+                if(capIter.hasNext()) {
+                    throw new Exception("More than one capacity entry: " + capIter.next().toString());
+                }
+            } else {
+                while(flightIter.hasNext()) {
+                    out.collect(flightIter.next());
+                }
+            }
         }
     }
 
@@ -699,48 +714,6 @@ public class FlightConnectionJoiner {
         long defaultDIWithAPChange = 240L;
         long defaultIDWithAPChange = 240L;
         long defaultIIWithAPChange = 240L;
-
-        /*
-        private long start = 0L;
-
-        private ArrayList<Long> ruleLoadingTimes = new ArrayList<Long>(64);
-        private ArrayList<Long> ruleCheckingTimes = new ArrayList<Long>(64);
-
-
-        @Override
-        public void open(Configuration parameters) {
-            start = System.currentTimeMillis();
-            LOG.info("CoGroupOperator opened at {} milliseconds.", start);
-        }
-
-        @Override
-        public void close() {
-            long end = System.currentTimeMillis();
-            LOG.info("CoGroupOperator closed at {} milliseconds. Running Time: {}", end, end-start);
-            long MAX = Long.MIN_VALUE;
-            long MIN = Long.MAX_VALUE;
-            long SUM = 0L;
-            for(Long l : ruleLoadingTimes) {
-                if(l.longValue() < MIN) {
-                    MIN = l.longValue();
-                }
-                if(l.longValue() > MAX) {
-                    MAX = l.longValue();
-                }
-                SUM += l.longValue();
-            }
-            LOG.info("Rule loading MIN: {} MAX: {} AVG: {}.", MIN, MAX, SUM/ruleLoadingTimes.size());
-            for(Long l : ruleCheckingTimes) {
-                if(l.longValue() < MIN) {
-                    MIN = l.longValue();
-                }
-                if(l.longValue() > MAX) {
-                    MAX = l.longValue();
-                }
-                SUM += l.longValue();
-            }
-            LOG.info("Rule checking MIN: {} MAX: {} AVG: {}.", MIN, MAX, SUM/ruleCheckingTimes.size());
-        }*/
 
         @Override
         public void coGroup(Iterable<Tuple2<Flight, Flight>> connections, Iterable<MCTEntry> mctEntries, Collector<Tuple2<Flight, Flight>> out) throws Exception {
@@ -1442,7 +1415,7 @@ public class FlightConnectionJoiner {
             DataSet<Tuple3<String, String, Integer>> aircraftCapacities = env.readCsvFile(capacityPath).fieldDelimiter('^').ignoreFirstLine()
                     .includeFields(false, true, true, true, false, false, false, false).types(String.class, String.class, Integer.class);
 
-            DataSet<Flight> join4 = join3.join(aircraftCapacities).where("f6", "f4").equalTo(0, 1).with(new CapacityJoiner());
+            DataSet<Flight> join4 = join3.coGroup(aircraftCapacities).where("f6", "f4").equalTo(0, 1).with(new CapacityGrouper());
 
             /*
             KeySelector<Flight, Tuple3<String, String, Integer>> ml1 = new KeySelector<Flight, Tuple3<String, String, Integer>>() {

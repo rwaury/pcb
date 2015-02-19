@@ -1125,7 +1125,7 @@ public class TrafficAnalysis {
         } else {
             lnMode = Math.log(543.0); // SFO-LAX
         }
-        double sigma2 = 4.0;
+        double sigma2 = 2.0;
         double sigma = Math.sqrt(sigma2);
         double mu = lnMode + sigma2;
         double x = distance;
