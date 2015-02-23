@@ -13,6 +13,9 @@ import org.apache.flink.core.fs.Path;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+/**
+ * main connection builder class that defines data flow
+ */
 public class ParallelConnectionBuilder {
 
     public static final Logger LOG = LoggerFactory.getLogger(ParallelConnectionBuilder.class);

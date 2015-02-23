@@ -3,6 +3,9 @@ package com.amadeus.ti.pcb;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.api.java.tuple.Tuple3;
 
+/**
+ * utility functions and constants for the connection builder
+ */
 public class CBUtil {
 
     public static final Character EMPTY = new Character(' ');

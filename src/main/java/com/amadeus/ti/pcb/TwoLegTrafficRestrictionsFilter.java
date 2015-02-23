@@ -3,6 +3,9 @@ package com.amadeus.ti.pcb;
 import org.apache.flink.api.common.functions.FilterFunction;
 import org.apache.flink.api.java.tuple.Tuple2;
 
+/**
+ * remove two-leg connections that are disallowed by traffic restrictions
+ */
 public class TwoLegTrafficRestrictionsFilter implements FilterFunction<Tuple2<Flight, Flight>> {
 
     private final String exceptionsGeneral = "ABHIMTDEG";

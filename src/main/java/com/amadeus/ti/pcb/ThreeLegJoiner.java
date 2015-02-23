@@ -5,6 +5,9 @@ import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.flink.util.Collector;
 
+/**
+ * creates three-leg connections by joining two-leg connections and pruning them
+ */
 public class ThreeLegJoiner implements FlatJoinFunction<Tuple2<Flight, Flight>, Tuple2<Flight, Flight>, Tuple3<Flight, Flight, Flight>> {
 
     @Override

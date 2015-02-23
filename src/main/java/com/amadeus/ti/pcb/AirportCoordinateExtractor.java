@@ -6,8 +6,10 @@ import org.apache.flink.util.Collector;
 
 import java.util.ArrayList;
 
-public class AirportCoordinateExtractor implements
-        FlatMapFunction<String, Tuple7<String, String, String, String, String, Double, Double>> {
+/**
+ * Parses airport data (airport IATA code, city code, country code, state code (if available), latitude, longitude)
+ */
+public class AirportCoordinateExtractor implements FlatMapFunction<String, Tuple7<String, String, String, String, String, Double, Double>> {
 
     private static final String DELIM = "\\^";
     private static final String HEADER = "#";

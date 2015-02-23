@@ -6,6 +6,10 @@ import org.apache.flink.util.Collector;
 
 import java.util.Iterator;
 
+/**
+ * Overwrites maximum capacity of a flight if more detailed data is available
+ * for that aircraft - airline combination
+ */
 public class CapacityGrouper implements CoGroupFunction<Flight, Tuple3<String, String, Integer>, Flight> {
 
     @Override

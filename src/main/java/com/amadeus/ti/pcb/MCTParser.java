@@ -7,6 +7,9 @@ import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.TimeZone;
 
+/**
+ * parses CSV MCT file
+ */
 public class MCTParser implements FlatMapFunction<String, MCTEntry> {
 
     private final static String DELIM = ",";

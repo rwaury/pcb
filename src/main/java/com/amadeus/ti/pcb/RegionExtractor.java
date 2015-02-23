@@ -3,6 +3,9 @@ package com.amadeus.ti.pcb;
 import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.api.java.tuple.Tuple2;
 
+/**
+ * extracts country-region mapping
+ */
 public class RegionExtractor implements MapFunction<String, Tuple2<String, String>> {
 
     private static final String DELIM = "\\^";

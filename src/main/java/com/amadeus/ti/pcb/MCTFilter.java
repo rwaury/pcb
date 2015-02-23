@@ -8,6 +8,9 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 
+/**
+ * check if already built two-leg connections fulfill MCT rules
+ */
 public class MCTFilter implements CoGroupFunction<Tuple2<Flight, Flight>, MCTEntry, Tuple2<Flight, Flight>> {
 
     private ArrayList<MCTEntry> DDList;
@@ -53,25 +56,25 @@ public class MCTFilter implements CoGroupFunction<Tuple2<Flight, Flight>, MCTEnt
             dep = entry.getDeparture();
             if (dep.isEmpty()) {
                 if (stat.equals("DD")) {
-                    DDList.add(entry);
+                    DDList.add(entry.deepCopy());
                 } else if (stat.equals("DI")) {
-                    DIList.add(entry);
+                    DIList.add(entry.deepCopy());
                 } else if (stat.equals("ID")) {
-                    IDList.add(entry);
+                    IDList.add(entry.deepCopy());
                 } else if (stat.equals("II")) {
-                    IIList.add(entry);
+                    IIList.add(entry.deepCopy());
                 } else {
                     throw new Exception("Unknown stat: " + entry.toString());
                 }
             } else if (!arr.equals(dep)) {
                 if (stat.equals("DD")) {
-                    DDWithAPChangeList.add(entry);
+                    DDWithAPChangeList.add(entry.deepCopy());
                 } else if (stat.equals("DI")) {
-                    DIWithAPChangeList.add(entry);
+                    DIWithAPChangeList.add(entry.deepCopy());
                 } else if (stat.equals("ID")) {
-                    IDWithAPChangeList.add(entry);
+                    IDWithAPChangeList.add(entry.deepCopy());
                 } else if (stat.equals("II")) {
-                    IIWithAPChangeList.add(entry);
+                    IIWithAPChangeList.add(entry.deepCopy());
                 } else {
                     throw new Exception("Unknown stat: " + entry.toString());
                 }
@@ -82,6 +85,7 @@ public class MCTFilter implements CoGroupFunction<Tuple2<Flight, Flight>, MCTEnt
         Collections.sort(DIList, new ScoreComparator());
         Collections.sort(IDList, new ScoreComparator());
         Collections.sort(IIList, new ScoreComparator());
+
         Collections.sort(DDWithAPChangeList, new ScoreComparator());
         Collections.sort(DIWithAPChangeList, new ScoreComparator());
         Collections.sort(IDWithAPChangeList, new ScoreComparator());

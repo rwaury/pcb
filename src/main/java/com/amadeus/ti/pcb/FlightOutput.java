@@ -13,12 +13,16 @@ import java.io.IOException;
 import java.nio.charset.Charset;
 import java.util.Date;
 
+/**
+ * classes to write and read Flight, Tuple2<Flight, Flight>
+ * and Tuple3<Flight, Flight, Flight> as binary (read and write)
+ * as well as CSV (write-only)
+ */
 public class FlightOutput {
 
     private static final char DELIM = ',';
     private static final int NEWLINE = '\n';
     private static final Charset charset = Charset.forName("UTF-8");
-    //private static final SimpleDateFormat df = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS");
 
     public static class NonStopFlightOutputFormat extends TextOutputFormat<Flight> {
 

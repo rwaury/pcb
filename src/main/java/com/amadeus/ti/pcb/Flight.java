@@ -2,6 +2,9 @@ package com.amadeus.ti.pcb;
 
 import org.apache.flink.api.java.tuple.Tuple15;
 
+/**
+ * class containing a single flight connection (multiple connections may be merged from a multi-leg flight)
+ */
 public class Flight extends Tuple15<GeoInfo, Long, GeoInfo, Long,
         String, Integer, String, Integer, String, Character, GeoInfo, Integer, Integer, Integer, Integer> {
 
@@ -56,11 +59,9 @@ public class Flight extends Tuple15<GeoInfo, Long, GeoInfo, Long,
         return new Flight(this.copy());
     }
 
-    public String getKey() {
-        return getOriginAirport() + getDestinationAirport() + getAirline() + getFlightNumber() + getDepartureTimestamp();
+    public String getOriginAirport() {
+        return this.f0.f0;
     }
-
-    public String getOriginAirport() { return this.f0.f0; }
 
     public void setOriginAirport(String originAirport) {
         this.f0.f0 = originAirport;
@@ -139,7 +140,9 @@ public class Flight extends Tuple15<GeoInfo, Long, GeoInfo, Long,
     }
 
 
-    public String getDestinationAirport() { return this.f2.f0; }
+    public String getDestinationAirport() {
+        return this.f2.f0;
+    }
 
     public void setDestinationAirport(String destinationAirport) {
         this.f2.f0 = destinationAirport;
@@ -263,9 +266,13 @@ public class Flight extends Tuple15<GeoInfo, Long, GeoInfo, Long,
     }
 
 
-    public Character getTrafficRestriction() { return this.f9; }
+    public Character getTrafficRestriction() {
+        return this.f9;
+    }
 
-    public void setTrafficRestriction(Character trafficRestrictions) { this.f9 = trafficRestrictions; }
+    public void setTrafficRestriction(Character trafficRestrictions) {
+        this.f9 = trafficRestrictions;
+    }
 
 
     public String getLastAirport() {
@@ -349,18 +356,30 @@ public class Flight extends Tuple15<GeoInfo, Long, GeoInfo, Long,
     }
 
 
-    public Integer getDepartureWindow() { return this.f12; }
+    public Integer getDepartureWindow() {
+        return this.f12;
+    }
 
-    public void setDepartureWindow(Integer depWindow1) { this.f12 = depWindow1; }
+    public void setDepartureWindow(Integer depWindow1) {
+        this.f12 = depWindow1;
+    }
 
 
-    public Integer getFirstArrivalWindow() { return this.f13; }
+    public Integer getFirstArrivalWindow() {
+        return this.f13;
+    }
 
-    public void setFirstArrivalWindow(Integer arrWindow1) { this.f13 = arrWindow1; }
+    public void setFirstArrivalWindow(Integer arrWindow1) {
+        this.f13 = arrWindow1;
+    }
 
 
-    public Integer getSecondArrivalWindow() { return this.f14; }
+    public Integer getSecondArrivalWindow() {
+        return this.f14;
+    }
 
-    public void setSecondArrivalWindow(Integer arrWindow2) { this.f14 = arrWindow2; }
+    public void setSecondArrivalWindow(Integer arrWindow2) {
+        this.f14 = arrWindow2;
+    }
 
 }

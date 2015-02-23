@@ -6,6 +6,10 @@ import org.apache.flink.core.memory.DataOutputView;
 
 import java.io.IOException;
 
+/**
+ * stores all relevant geographical data of a origin or destination of a flight connection
+ * is a nested class of Flight
+ */
 public class GeoInfo extends Tuple8<String, String, String, String, String, String, Double, Double> {
 
     public static final String DELIM = "^"; // for toString function

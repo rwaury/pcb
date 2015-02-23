@@ -3,6 +3,9 @@ package com.amadeus.ti.pcb;
 import org.apache.flink.api.common.functions.FlatJoinFunction;
 import org.apache.flink.util.Collector;
 
+/**
+ * merge flights that have the same flight number (multi-leg flights)
+ */
 public class MultiLegJoiner implements FlatJoinFunction<Flight, Flight, Flight> {
 
     private final String exceptions = "AI";

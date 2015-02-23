@@ -3,6 +3,9 @@ package com.amadeus.ti.pcb;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.api.java.tuple.Tuple25;
 
+/**
+ * contains all information of an MCT rule
+ */
 public class MCTEntry extends Tuple25<String, String, String, String, String, String,
         String, String, String, String, String, String,
         String, String, String, Integer, Integer, Integer,
@@ -45,6 +48,34 @@ public class MCTEntry extends Tuple25<String, String, String, String, String, St
         this.f22 = nextRegion;
         this.f23 = new Tuple2<Long, Long>(validFrom, validUntil);
         this.f24 = mct;
+    }
+
+    public MCTEntry(Tuple25<String, String, String, String, String, String, String, String, String, String, String, String, String, String, String, Integer, Integer, Integer, Integer, String, String, String, String, Tuple2<Long, Long>, Integer> copy) {
+        this.f0 = copy.f0;
+        this.f1 = copy.f1;
+        this.f2 = copy.f2;
+        this.f3 = copy.f3;
+        this.f4 = copy.f4;
+        this.f5 = copy.f5;
+        this.f6 = copy.f6;
+        this.f7 = copy.f7;
+        this.f8 = copy.f8;
+        this.f9 = copy.f9;
+        this.f10 = copy.f10;
+        this.f11 = copy.f11;
+        this.f12 = copy.f12;
+        this.f13 = copy.f13;
+        this.f14 = copy.f14;
+        this.f15 = copy.f15;
+        this.f16 = copy.f16;
+        this.f17 = copy.f17;
+        this.f18 = copy.f18;
+        this.f19 = copy.f19;
+        this.f20 = copy.f20;
+        this.f21 = copy.f21;
+        this.f22 = copy.f22;
+        this.f23 = new Tuple2<Long, Long>(copy.f23.f0, copy.f23.f1);
+        this.f24 = copy.f24;
     }
 
 
@@ -150,6 +181,10 @@ public class MCTEntry extends Tuple25<String, String, String, String, String, St
 
     public Integer getMCT() {
         return f24;
+    }
+
+    public MCTEntry deepCopy() {
+        return new MCTEntry(this.copy());
     }
 
 }

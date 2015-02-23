@@ -6,6 +6,9 @@ import org.apache.flink.util.Collector;
 import java.text.SimpleDateFormat;
 import java.util.*;
 
+/**
+ * parse SSIM7 schedule in CSV format
+ */
 public class FilteringUTCExtractor implements FlatMapFunction<String, Flight> {
 
     private static final String DELIM = "\\^";

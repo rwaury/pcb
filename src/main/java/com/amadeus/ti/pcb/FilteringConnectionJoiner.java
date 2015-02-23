@@ -4,6 +4,9 @@ import org.apache.flink.api.common.functions.FlatJoinFunction;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.util.Collector;
 
+/**
+ * creates two-leg flights by joining non-stop flights and pruning the result
+ */
 public class FilteringConnectionJoiner implements FlatJoinFunction<Flight, Flight, Tuple2<Flight, Flight>> {
 
     private final String exceptionsGeneral = "ABHIMTDEG";

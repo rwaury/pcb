@@ -4,6 +4,9 @@ import org.apache.flink.api.common.functions.JoinFunction;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.api.java.tuple.Tuple7;
 
+/**
+ * add region info to geographical information
+ */
 public class RegionJoiner implements JoinFunction<Tuple7<String, String, String, String, String, Double, Double>,
         Tuple2<String, String>, Tuple7<String, String, String, String, String, Double, Double>> {
 

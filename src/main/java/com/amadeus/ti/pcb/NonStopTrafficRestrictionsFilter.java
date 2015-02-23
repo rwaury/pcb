@@ -3,7 +3,7 @@ package com.amadeus.ti.pcb;
 import org.apache.flink.api.common.functions.FilterFunction;
 
 /**
- * Discard all non-stop flights that can only be part of multileg flights
+ * Discard all non-stop flights that can only be part of multi-leg flights
  */
 public class NonStopTrafficRestrictionsFilter implements FilterFunction<Flight> {
 
