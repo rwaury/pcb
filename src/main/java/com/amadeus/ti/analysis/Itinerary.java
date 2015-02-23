@@ -1,4 +1,4 @@
-package com.amadeus.pcb.join;
+package com.amadeus.ti.analysis;
 
 import org.apache.flink.api.java.tuple.Tuple19;
 

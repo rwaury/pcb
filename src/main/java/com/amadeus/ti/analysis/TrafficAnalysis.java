@@ -1,8 +1,10 @@
-package com.amadeus.pcb.join;
+package com.amadeus.ti.analysis;
 
 import cc.mallet.optimize.LimitedMemoryBFGS;
 import cc.mallet.optimize.OptimizationException;
-import net.didion.jwnl.data.Exc;
+import com.amadeus.ti.pcb.Flight;
+import com.amadeus.ti.pcb.FlightOutput;
+import com.amadeus.ti.pcb.RegionExtractor;
 import org.apache.commons.math3.linear.Array2DRowRealMatrix;
 import org.apache.commons.math3.linear.ArrayRealVector;
 import org.apache.commons.math3.linear.RealVector;
@@ -16,9 +18,7 @@ import org.apache.flink.api.java.tuple.*;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.core.fs.FileSystem;
 import org.apache.flink.util.Collector;
-import org.apache.hadoop.util.hash.Hash;
 
-import java.io.Serializable;
 import java.text.SimpleDateFormat;
 import java.util.*;
 
@@ -59,7 +59,7 @@ public class TrafficAnalysis {
         DataSet<Tuple4<String, String, String, String>> airportCountryNR = env.readTextFile("hdfs:///user/rwaury/input2/ori_por_public.csv").setParallelism(1)
                 .flatMap(new AirportCountryExtractor()).setParallelism(1);
 
-        DataSet<Tuple2<String, String>> regionInfo = env.readTextFile("hdfs:///user/rwaury/input2/ori_country_region_info.csv").map(new FlightConnectionJoiner.RegionExtractor());
+        DataSet<Tuple2<String, String>> regionInfo = env.readTextFile("hdfs:///user/rwaury/input2/ori_country_region_info.csv").map(new RegionExtractor());
         //regionInfo.writeAsCsv(outputPath + "regionInfo", "\n", ",", FileSystem.WriteMode.OVERWRITE).setParallelism(1);
 
         DataSet<Tuple4<String, String, String, String>> airportCountry = airportCountryNR.join(regionInfo).where(2).equalTo(0).with(new RegionJoiner());

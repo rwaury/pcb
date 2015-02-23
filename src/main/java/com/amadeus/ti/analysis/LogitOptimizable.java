@@ -1,7 +1,6 @@
-package com.amadeus.pcb.join;
+package com.amadeus.ti.analysis;
 
 import cc.mallet.optimize.Optimizable;
-import org.apache.flink.api.java.tuple.Tuple4;
 
 import java.util.ArrayList;
 
