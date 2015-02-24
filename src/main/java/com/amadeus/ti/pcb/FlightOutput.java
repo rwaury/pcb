@@ -81,7 +81,8 @@ public class FlightOutput {
         return flight.getOriginAirport() + DELIM + flight.getDestinationAirport() + DELIM +
                 departure.toString() + DELIM + arrival.toString() + DELIM +
                 flight.getAirline() + flight.getFlightNumber() + DELIM +
-                flight.getLegCount() + DELIM + flight.getMaxCapacity() + DELIM + flight.getCodeShareInfo();
+                flight.getLegCount() + DELIM + flight.getMaxCapacity() + DELIM + flight.getCodeShareInfo() +
+                DELIM + flight.getOriginICAO() + DELIM + flight.getDestinationICAO();
     }
 
 

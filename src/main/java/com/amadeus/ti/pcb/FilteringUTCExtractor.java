@@ -128,8 +128,8 @@ public class FilteringUTCExtractor implements FlatMapFunction<String, Flight> {
             trafficRestriction = tmp[12].trim().charAt(0);
         }
         Integer flightNumber = Integer.parseInt(tmp[14].trim());
-        out.collect(new Flight(originAirport, originTerminal, "", "", "", "", 0.0, 0.0, departure.getTime(),
-                destinationAirport, destinationTerminal, "", "", "", "", 0.0, 0.0, arrival.getTime(),
+        out.collect(new Flight(originAirport, originTerminal, "", "", "", "", 0.0, 0.0, "", departure.getTime(),
+                destinationAirport, destinationTerminal, "", "", "", "", 0.0, 0.0, "", arrival.getTime(),
                 airline, flightNumber, aircraft, -1, codeshareInfo, trafficRestriction));
     }
 }

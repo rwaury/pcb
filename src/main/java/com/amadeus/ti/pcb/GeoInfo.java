@@ -1,6 +1,6 @@
 package com.amadeus.ti.pcb;
 
-import org.apache.flink.api.java.tuple.Tuple8;
+import org.apache.flink.api.java.tuple.Tuple9;
 import org.apache.flink.core.memory.DataInputView;
 import org.apache.flink.core.memory.DataOutputView;
 
@@ -10,13 +10,15 @@ import java.io.IOException;
  * stores all relevant geographical data of a origin or destination of a flight connection
  * is a nested class of Flight
  */
-public class GeoInfo extends Tuple8<String, String, String, String, String, String, Double, Double> {
+public class GeoInfo extends Tuple9<String, String, String, String, String, String, Double, Double, String> {
 
     public static final String DELIM = "^"; // for toString function
 
-    public GeoInfo() {super();}
+    public GeoInfo() {
+        super();
+    }
 
-    public GeoInfo(String airport, String terminal, String city, String state, String country, String region, Double latitude, Double longitude) {
+    public GeoInfo(String airport, String terminal, String city, String state, String country, String region, Double latitude, Double longitude, String ICAO) {
         this.f0 = airport;
         this.f1 = terminal;
         this.f2 = city;
@@ -25,9 +27,10 @@ public class GeoInfo extends Tuple8<String, String, String, String, String, Stri
         this.f5 = region;
         this.f6 = latitude;
         this.f7 = longitude;
+        this.f8 = ICAO;
     }
 
-    private GeoInfo(Tuple8<String, String, String, String, String, String, Double, Double> info) {
+    private GeoInfo(Tuple9<String, String, String, String, String, String, Double, Double, String> info) {
         this.f0 = info.f0;
         this.f1 = info.f1;
         this.f2 = info.f2;
@@ -36,6 +39,7 @@ public class GeoInfo extends Tuple8<String, String, String, String, String, Stri
         this.f5 = info.f5;
         this.f6 = info.f6;
         this.f7 = info.f7;
+        this.f8 = info.f8;
     }
 
     public GeoInfo clone() {
@@ -51,6 +55,7 @@ public class GeoInfo extends Tuple8<String, String, String, String, String, Stri
         out.writeUTF(this.f5);
         out.writeDouble(this.f6);
         out.writeDouble(this.f7);
+        out.writeUTF(this.f8);
     }
 
     public void read(DataInputView in) throws IOException {
@@ -62,6 +67,7 @@ public class GeoInfo extends Tuple8<String, String, String, String, String, Stri
         this.f5 = in.readUTF();
         this.f6 = in.readDouble();
         this.f7 = in.readDouble();
+        this.f8 = in.readUTF();
     }
 
     @Override

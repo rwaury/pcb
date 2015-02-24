@@ -12,7 +12,9 @@ public class ThreeLegJoiner implements FlatJoinFunction<Tuple2<Flight, Flight>, 
 
     @Override
     public void join(Tuple2<Flight, Flight> in1, Tuple2<Flight, Flight> in2, Collector<Tuple3<Flight, Flight, Flight>> out) throws Exception {
-
+        if(!in1.f1.equals(in2.f0)) {
+            return;
+        }
         long hub1Time = in1.f1.getDepartureTimestamp() - in1.f0.getArrivalTimestamp();
         long hub2Time = in2.f1.getDepartureTimestamp() - in2.f0.getArrivalTimestamp();
         long hubTime = hub1Time + hub2Time;

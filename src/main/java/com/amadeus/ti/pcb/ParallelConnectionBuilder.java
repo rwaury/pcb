@@ -7,7 +7,7 @@ import org.apache.flink.api.java.ExecutionEnvironment;
 //import org.apache.flink.api.java.functions.KeySelector;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.api.java.tuple.Tuple3;
-import org.apache.flink.api.java.tuple.Tuple7;
+import org.apache.flink.api.java.tuple.Tuple8;
 import org.apache.flink.core.fs.FileSystem;
 import org.apache.flink.core.fs.Path;
 import org.slf4j.Logger;
@@ -26,7 +26,7 @@ public class ParallelConnectionBuilder {
     private static String defaultCapacityPath = "hdfs:///user/rwaury/input2/default_capacities.csv";
     private static String capacityPath = "hdfs:///user/rwaury/input2/capacities_2014-07-01.csv";
     private static String mctPath = "hdfs:///user/rwaury/input2/mct.csv";
-    private static String outputPath = "hdfs:///user/rwaury/output2/flights/";
+    private static String outputPath = "hdfs:///user/rwaury/output3/flights/";
 
     public static final long START = 1399248000000L;
     public static final long END = 1399852799000L;
@@ -59,12 +59,12 @@ public class ParallelConnectionBuilder {
             DataSet<Flight> extracted = env.readTextFile(schedulePath).flatMap(new FilteringUTCExtractor());
 
             // extract coordinates of all known airports
-            DataSet<Tuple7<String, String, String, String, String, Double, Double>> airportCoordinatesNR =
+            DataSet<Tuple8<String, String, String, String, String, Double, Double, String>> airportCoordinatesNR =
                     env.readTextFile(oriPath).flatMap(new AirportCoordinateExtractor());
 
             // get IATA region information for each airport
             DataSet<Tuple2<String, String>> regionInfo = env.readTextFile(regionPath).map(new RegionExtractor());
-            DataSet<Tuple7<String, String, String, String, String, Double, Double>> airportCoordinates =
+            DataSet<Tuple8<String, String, String, String, String, Double, Double, String>> airportCoordinates =
                     airportCoordinatesNR.join(regionInfo).where(3).equalTo(0).with(new RegionJoiner());
 
             /*KeySelector<Flight, String> jk1 = new KeySelector<Flight, String>() {
@@ -90,7 +90,7 @@ public class ParallelConnectionBuilder {
             DataSet<Tuple3<String, String, Integer>> aircraftCapacities = env.readCsvFile(capacityPath).fieldDelimiter('^').ignoreFirstLine()
                     .includeFields(false, true, true, true, false, false, false, false).types(String.class, String.class, Integer.class);
 
-            DataSet<Flight> join4 = join3.coGroup(aircraftCapacities).where("f6", "f4").equalTo(0, 1).with(new CapacityGrouper());
+            DataSet<Flight> join4 = join3.coGroup(aircraftCapacities).where("f6","f4").equalTo(0,1).with(new CapacityGrouper());
 
             /*KeySelector<Flight, Tuple3<String, String, Integer>> ml1 = new KeySelector<Flight, Tuple3<String, String, Integer>>() {
                 public Tuple3<String, String, Integer> getKey(Flight tuple) {
@@ -104,46 +104,46 @@ public class ParallelConnectionBuilder {
             };*/
 
             // create multi-leg flights as non-stop flights
-            DataSet<Flight> multiLeg2a = join4.join(join4, JOIN_HINT).where("f2.f2", "f4", "f5", "f13")
-                    .equalTo("f0.f2", "f4", "f5", "f12").with(new MultiLegJoiner());
-            DataSet<Flight> multiLeg2b = join4.join(join4, JOIN_HINT).where("f2.f2", "f4", "f5", "f14")
-                    .equalTo("f0.f2", "f4", "f5", "f12").with(new MultiLegJoiner());
+            DataSet<Flight> multiLeg2a = join4.join(join4, JOIN_HINT).where("f2.f0", "f4", "f5", "f13")
+                    .equalTo("f0.f0", "f4", "f5", "f12").with(new MultiLegJoiner());
+            DataSet<Flight> multiLeg2b = join4.join(join4, JOIN_HINT).where("f2.f0", "f4", "f5", "f14")
+                    .equalTo("f0.f0", "f4", "f5", "f12").with(new MultiLegJoiner());
             DataSet<Flight> multiLeg2 = multiLeg2a.union(multiLeg2b);
 
-            DataSet<Flight> multiLeg3a = multiLeg2.join(join4, JOIN_HINT).where("f2.f2", "f4", "f5", "f13")
-                    .equalTo("f0.f2", "f4", "f5", "f12").with(new MultiLegJoiner());
-            DataSet<Flight> multiLeg3b = multiLeg2.join(join4, JOIN_HINT).where("f2.f2", "f4", "f5", "f14")
-                    .equalTo("f0.f2", "f4", "f5", "f12").with(new MultiLegJoiner());
+            DataSet<Flight> multiLeg3a = multiLeg2.join(join4, JOIN_HINT).where("f2.f0", "f4", "f5", "f13")
+                    .equalTo("f0.f0", "f4", "f5", "f12").with(new MultiLegJoiner());
+            DataSet<Flight> multiLeg3b = multiLeg2.join(join4, JOIN_HINT).where("f2.f0", "f4", "f5", "f14")
+                    .equalTo("f0.f0", "f4", "f5", "f12").with(new MultiLegJoiner());
             DataSet<Flight> multiLeg3 = multiLeg3a.union(multiLeg3b);
 
-            DataSet<Flight> multiLeg4a = multiLeg2.join(multiLeg2, JOIN_HINT).where("f2.f2", "f4", "f5", "f13")
-                    .equalTo("f0.f2", "f4", "f5", "f12").with(new MultiLegJoiner());
-            DataSet<Flight> multiLeg4b = multiLeg2.join(multiLeg2, JOIN_HINT).where("f2.f2", "f4", "f5", "f14")
-                    .equalTo("f0.f2", "f4", "f5", "f12").with(new MultiLegJoiner());
+            DataSet<Flight> multiLeg4a = multiLeg2.join(multiLeg2, JOIN_HINT).where("f2.f0", "f4", "f5", "f13")
+                    .equalTo("f0.f0", "f4", "f5", "f12").with(new MultiLegJoiner());
+            DataSet<Flight> multiLeg4b = multiLeg2.join(multiLeg2, JOIN_HINT).where("f2.f0", "f4", "f5", "f14")
+                    .equalTo("f0.f0", "f4", "f5", "f12").with(new MultiLegJoiner());
             DataSet<Flight> multiLeg4 = multiLeg4a.union(multiLeg4b);
 
-            DataSet<Flight> multiLeg5a = multiLeg2.join(multiLeg3, JOIN_HINT).where("f2.f2", "f4", "f5", "f13")
-                    .equalTo("f0.f2", "f4", "f5", "f12").with(new MultiLegJoiner());
-            DataSet<Flight> multiLeg5b = multiLeg2.join(multiLeg3, JOIN_HINT).where("f2.f2", "f4", "f5", "f14")
-                    .equalTo("f0.f2", "f4", "f5", "f12").with(new MultiLegJoiner());
+            DataSet<Flight> multiLeg5a = multiLeg2.join(multiLeg3, JOIN_HINT).where("f2.f0", "f4", "f5", "f13")
+                    .equalTo("f0.f0", "f4", "f5", "f12").with(new MultiLegJoiner());
+            DataSet<Flight> multiLeg5b = multiLeg2.join(multiLeg3, JOIN_HINT).where("f2.f0", "f4", "f5", "f14")
+                    .equalTo("f0.f0", "f4", "f5", "f12").with(new MultiLegJoiner());
             DataSet<Flight> multiLeg5 = multiLeg5a.union(multiLeg5b);
 
-            DataSet<Flight> multiLeg6a = multiLeg3.join(multiLeg3, JOIN_HINT).where("f2.f2", "f4", "f5", "f13")
-                    .equalTo("f0.f2", "f4", "f5", "f12").with(new MultiLegJoiner());
-            DataSet<Flight> multiLeg6b = multiLeg3.join(multiLeg3, JOIN_HINT).where("f2.f2", "f4", "f5", "f14")
-                    .equalTo("f0.f2", "f4", "f5", "f12").with(new MultiLegJoiner());
+            DataSet<Flight> multiLeg6a = multiLeg3.join(multiLeg3, JOIN_HINT).where("f2.f0", "f4", "f5", "f13")
+                    .equalTo("f0.f0", "f4", "f5", "f12").with(new MultiLegJoiner());
+            DataSet<Flight> multiLeg6b = multiLeg3.join(multiLeg3, JOIN_HINT).where("f2.f0", "f4", "f5", "f14")
+                    .equalTo("f0.f0", "f4", "f5", "f12").with(new MultiLegJoiner());
             DataSet<Flight> multiLeg6 = multiLeg6a.union(multiLeg6b);
 
-            DataSet<Flight> multiLeg7a = multiLeg3.join(multiLeg4, JOIN_HINT).where("f2.f2", "f4", "f5", "f13")
-                    .equalTo("f0.f2", "f4", "f5", "f12").with(new MultiLegJoiner());
-            DataSet<Flight> multiLeg7b = multiLeg3.join(multiLeg4, JOIN_HINT).where("f2.f2", "f4", "f5", "f14")
-                    .equalTo("f0.f2", "f4", "f5", "f12").with(new MultiLegJoiner());
+            DataSet<Flight> multiLeg7a = multiLeg3.join(multiLeg4, JOIN_HINT).where("f2.f0", "f4", "f5", "f13")
+                    .equalTo("f0.f0", "f4", "f5", "f12").with(new MultiLegJoiner());
+            DataSet<Flight> multiLeg7b = multiLeg3.join(multiLeg4, JOIN_HINT).where("f2.f0", "f4", "f5", "f14")
+                    .equalTo("f0.f0", "f4", "f5", "f12").with(new MultiLegJoiner());
             DataSet<Flight> multiLeg7 = multiLeg7a.union(multiLeg7b);
 
-            DataSet<Flight> multiLeg8a = multiLeg4.join(multiLeg4, JOIN_HINT).where("f2.f2", "f4", "f5", "f13")
-                    .equalTo("f0.f2", "f4", "f5", "f12").with(new MultiLegJoiner());
-            DataSet<Flight> multiLeg8b = multiLeg4.join(multiLeg4, JOIN_HINT).where("f2.f2", "f4", "f5", "f14")
-                    .equalTo("f0.f2", "f4", "f5", "f12").with(new MultiLegJoiner());
+            DataSet<Flight> multiLeg8a = multiLeg4.join(multiLeg4, JOIN_HINT).where("f2.f0", "f4", "f5", "f13")
+                    .equalTo("f0.f0", "f4", "f5", "f12").with(new MultiLegJoiner());
+            DataSet<Flight> multiLeg8b = multiLeg4.join(multiLeg4, JOIN_HINT).where("f2.f0", "f4", "f5", "f14")
+                    .equalTo("f0.f0", "f4", "f5", "f12").with(new MultiLegJoiner());
             DataSet<Flight> multiLeg8 = multiLeg8a.union(multiLeg8b);
 
             DataSet<Flight> singleFltNoFlights = join4.union(multiLeg2).union(multiLeg3).union(multiLeg4).union(multiLeg5).union(multiLeg6).union(multiLeg7).union(multiLeg8);

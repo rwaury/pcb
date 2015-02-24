@@ -58,6 +58,7 @@ public class MultiLegJoiner implements FlatJoinFunction<Flight, Flight, Flight> 
         result.setOriginRegion(in1.getOriginRegion());
         result.setOriginLatitude(in1.getOriginLatitude());
         result.setOriginLongitude(in1.getOriginLongitude());
+        result.setOriginICAO(in1.getOriginICAO());
         result.setDepartureTimestamp(in1.getDepartureTimestamp());
         result.setDepartureWindow(in1.getDepartureWindow());
 
@@ -69,24 +70,16 @@ public class MultiLegJoiner implements FlatJoinFunction<Flight, Flight, Flight> 
         result.setDestinationRegion(in2.getDestinationRegion());
         result.setDestinationLatitude(in2.getDestinationLatitude());
         result.setDestinationLongitude(in2.getDestinationLongitude());
+        result.setDestinationICAO(in2.getDestinationICAO());
         result.setArrivalTimestamp(in2.getArrivalTimestamp());
         result.setFirstArrivalWindow(in2.getFirstArrivalWindow());
         result.setSecondArrivalWindow(in2.getSecondArrivalWindow());
 
         result.setAirline(in1.getAirline());
         result.setFlightNumber(in1.getFlightNumber());
-        if (!in1.getAircraftType().equals(in2.getAircraftType())) {
-            if (in1.getMaxCapacity() <= in2.getMaxCapacity()) {
-                result.setAircraftType(in1.getAircraftType());
-                result.setMaxCapacity(in1.getMaxCapacity());
-            } else {
-                result.setAircraftType(in2.getAircraftType());
-                result.setMaxCapacity(in2.getMaxCapacity());
-            }
-        } else {
-            result.setAircraftType(in1.getAircraftType());
-            result.setMaxCapacity(in1.getMaxCapacity());
-        }
+        result.setAircraftType(in1.getAircraftType()); // connection is discarded on aircraft change (see above)
+        result.setMaxCapacity(Math.min(in1.getMaxCapacity(), in2.getMaxCapacity()));
+
         String codeshareInfo = "";
         if (!in1.getCodeShareInfo().isEmpty() && !in2.getCodeShareInfo().isEmpty()) {
             // merge codeshare info
@@ -123,6 +116,7 @@ public class MultiLegJoiner implements FlatJoinFunction<Flight, Flight, Flight> 
         result.setLastRegion(in2.getLastRegion());
         result.setLastLatitude(in2.getLastLatitude());
         result.setLastLongitude(in2.getLastLongitude());
+        result.setLastICAO(in2.getLastICAO());
 
         result.setLegCount(in1.getLegCount() + in2.getLegCount());
 

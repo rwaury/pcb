@@ -15,12 +15,12 @@ public class Flight extends Tuple15<GeoInfo, Long, GeoInfo, Long,
         this.f10 = new GeoInfo();
     }
 
-    public Flight(String originAirport, String originTerminal, String originCity, String originState, String originCountry, String originRegion, Double originLatitude, Double originLongitude, Long departureTimestamp,
-                  String destAirport, String destTerminal, String destCity, String destState, String destCountry, String destRegion, Double destLatitude, Double destLongitude, Long arrivalTimestamp,
+    public Flight(String originAirport, String originTerminal, String originCity, String originState, String originCountry, String originRegion, Double originLatitude, Double originLongitude, String originICAO, Long departureTimestamp,
+                  String destAirport, String destTerminal, String destCity, String destState, String destCountry, String destRegion, Double destLatitude, Double destLongitude, String destICAO, Long arrivalTimestamp,
                   String airline, Integer flightNumber, String aircraftType, Integer maxCapacity, String codeshareInfo, char trafficRestriction) {
-        this.f0 = new GeoInfo(originAirport, originTerminal, originCity, originState, originCountry, originRegion, originLatitude, originLongitude);
+        this.f0 = new GeoInfo(originAirport, originTerminal, originCity, originState, originCountry, originRegion, originLatitude, originLongitude, originICAO);
         this.f1 = departureTimestamp;
-        this.f2 = new GeoInfo(destAirport, destTerminal, destCity, destState, destCountry, destRegion, destLatitude, destLongitude);
+        this.f2 = new GeoInfo(destAirport, destTerminal, destCity, destState, destCountry, destRegion, destLatitude, destLongitude, destICAO);
         this.f3 = arrivalTimestamp;
         this.f4 = airline;
         this.f5 = flightNumber;
@@ -29,7 +29,7 @@ public class Flight extends Tuple15<GeoInfo, Long, GeoInfo, Long,
         this.f8 = codeshareInfo;
         this.f9 = trafficRestriction;
         // the last GeoInfo field is redundant for most flights but required for merged multi-leg flights
-        this.f10 = new GeoInfo(originAirport, originTerminal, originCity, originState, originCountry, originRegion, originLatitude, originLongitude);
+        this.f10 = new GeoInfo(originAirport, originTerminal, originCity, originState, originCountry, originRegion, originLatitude, originLongitude, originICAO);
         this.f11 = 1; // number of legs
         this.f12 = CBUtil.getFirstWindow(departureTimestamp); // dep window
         this.f13 = CBUtil.getFirstWindow(arrivalTimestamp); // arr window 1
@@ -131,6 +131,15 @@ public class Flight extends Tuple15<GeoInfo, Long, GeoInfo, Long,
     }
 
 
+    public String getOriginICAO() {
+        return this.f0.f8;
+    }
+
+    public void setOriginICAO(String icao) {
+        this.f0.f8 = icao;
+    }
+
+
     public Long getDepartureTimestamp() {
         return this.f1;
     }
@@ -209,6 +218,15 @@ public class Flight extends Tuple15<GeoInfo, Long, GeoInfo, Long,
 
     public void setDestinationLongitude(Double destinationLongitude) {
         this.f2.f7 = destinationLongitude;
+    }
+
+
+    public String getDestinationICAO() {
+        return this.f2.f8;
+    }
+
+    public void setDestinationICAO(String icao) {
+        this.f2.f8 = icao;
     }
 
 
@@ -344,6 +362,15 @@ public class Flight extends Tuple15<GeoInfo, Long, GeoInfo, Long,
 
     public void setLastLongitude(Double originLongitude) {
         this.f10.f7 = originLongitude;
+    }
+
+
+    public String getLastICAO() {
+        return this.f10.f8;
+    }
+
+    public void setLastICAO(String icao) {
+        this.f10.f8 = icao;
     }
 
 

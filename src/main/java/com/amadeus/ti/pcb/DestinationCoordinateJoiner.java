@@ -1,15 +1,15 @@
 package com.amadeus.ti.pcb;
 
 import org.apache.flink.api.common.functions.JoinFunction;
-import org.apache.flink.api.java.tuple.Tuple7;
+import org.apache.flink.api.java.tuple.Tuple8;
 
 /**
  * add geographical data to Flight instances
  */
-public class DestinationCoordinateJoiner implements JoinFunction<Flight, Tuple7<String, String, String, String, String, Double, Double>, Flight> {
+public class DestinationCoordinateJoiner implements JoinFunction<Flight, Tuple8<String, String, String, String, String, Double, Double, String>, Flight> {
 
     @Override
-    public Flight join(Flight first, Tuple7<String, String, String, String, String, Double, Double> second)
+    public Flight join(Flight first, Tuple8<String, String, String, String, String, Double, Double, String> second)
             throws Exception {
         if (!second.f1.isEmpty()) {
             first.setDestinationCity(second.f1);
@@ -22,6 +22,7 @@ public class DestinationCoordinateJoiner implements JoinFunction<Flight, Tuple7<
         first.setDestinationRegion(second.f4);
         first.setDestinationLatitude(second.f5);
         first.setDestinationLongitude(second.f6);
+        first.setDestinationICAO(second.f7);
         return first;
     }
 

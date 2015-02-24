@@ -37,7 +37,9 @@ public class FilteringConnectionJoiner implements FlatJoinFunction<Flight, Fligh
             // some multi-leg flights are circular
             return;
         }
-        if (in1.getAirline().equals(in2.getAirline()) && in1.getFlightNumber().equals(in2.getFlightNumber())) {
+        if (in1.getAirline().equals(in2.getAirline()) &&
+            in1.getFlightNumber().equals(in2.getFlightNumber()) &&
+            in1.getAircraftType().equals(in2.getAircraftType())) {
             // multi-leg flight connections have already been built
             return;
         }

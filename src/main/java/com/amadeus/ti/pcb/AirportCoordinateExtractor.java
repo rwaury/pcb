@@ -1,7 +1,7 @@
 package com.amadeus.ti.pcb;
 
 import org.apache.flink.api.common.functions.FlatMapFunction;
-import org.apache.flink.api.java.tuple.Tuple7;
+import org.apache.flink.api.java.tuple.Tuple8;
 import org.apache.flink.util.Collector;
 
 import java.util.ArrayList;
@@ -9,7 +9,7 @@ import java.util.ArrayList;
 /**
  * Parses airport data (airport IATA code, city code, country code, state code (if available), latitude, longitude)
  */
-public class AirportCoordinateExtractor implements FlatMapFunction<String, Tuple7<String, String, String, String, String, Double, Double>> {
+public class AirportCoordinateExtractor implements FlatMapFunction<String, Tuple8<String, String, String, String, String, Double, Double, String>> {
 
     private static final String DELIM = "\\^";
     private static final String HEADER = "#";
@@ -27,7 +27,7 @@ public class AirportCoordinateExtractor implements FlatMapFunction<String, Tuple
     }};
 
     @Override
-    public void flatMap(String value, Collector<Tuple7<String, String, String, String, String, Double, Double>> out) throws Exception {
+    public void flatMap(String value, Collector<Tuple8<String, String, String, String, String, Double, Double, String>> out) throws Exception {
         tmp = value.split(DELIM);
         if (tmp[0].trim().startsWith(HEADER)) {
             // header
@@ -53,6 +53,7 @@ public class AirportCoordinateExtractor implements FlatMapFunction<String, Tuple
             return;
         }
         String iataCode = tmp[0].trim();
+        String icaoCode = tmp[1].trim();
         String cityCode = tmp[36].trim();
         String countryCode = tmp[16].trim();
         String stateCode;
@@ -61,6 +62,6 @@ public class AirportCoordinateExtractor implements FlatMapFunction<String, Tuple
         } else {
             stateCode = "";
         }
-        out.collect(new Tuple7<String, String, String, String, String, Double, Double>(iataCode, cityCode, stateCode, countryCode, "", latitude, longitude));
+        out.collect(new Tuple8<String, String, String, String, String, Double, Double, String>(iataCode, cityCode, stateCode, countryCode, "", latitude, longitude, icaoCode));
     }
 }
