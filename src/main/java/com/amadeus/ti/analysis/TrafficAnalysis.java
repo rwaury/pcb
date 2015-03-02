@@ -55,6 +55,9 @@ public class TrafficAnalysis {
     private static String midtPath = "hdfs:///user/rwaury/input2/MIDTTotalHits.csv";
     private static String outputPath = "hdfs:///user/rwaury/output2/flights/";
 
+    private static final JoinOperatorBase.JoinHint JOIN_HINT = JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE;
+    private static final FileSystem.WriteMode OVERWRITE = FileSystem.WriteMode.OVERWRITE;
+
     public static void main(String[] args) throws Exception {
         ExecutionEnvironment env = ExecutionEnvironment.getExecutionEnvironment();
 
@@ -83,7 +86,7 @@ public class TrafficAnalysis {
                 return new Tuple3<String, String, Integer>(flight.getAirline() + flight.getFlightNumber(), dayFormat.format(d), flight.getMaxCapacity());
             }
         }).groupBy(0,1).min(2);
-        flightBounds.writeAsCsv(outputPath + "flightCapacity", "\n", ",", FileSystem.WriteMode.OVERWRITE).setParallelism(1);
+        flightBounds.writeAsCsv(outputPath + "flightCapacity", "\n", ",", OVERWRITE).setParallelism(1);
 
         DataSet<String> midtStrings = env.readTextFile(midtPath);
         DataSet<MIDT> midt = midtStrings.flatMap(new MIDTParser()).map(new MIDTCompressor()).groupBy(0,1,2,3,4,5,6,7).reduceGroup(new MIDTGrouper());
@@ -148,7 +151,7 @@ public class TrafficAnalysis {
                         out.collect(result);
                     }
                 });
-        ODBounds.writeAsCsv(outputPath + "ODBounds", "\n", ",", FileSystem.WriteMode.OVERWRITE).setParallelism(1);
+        ODBounds.writeAsCsv(outputPath + "ODBounds", "\n", ",", OVERWRITE).setParallelism(1);
 
         DataSet<Tuple7<String, String, Boolean, Boolean, Boolean, Integer, Integer>> inOutCapa = nonStopConnections.flatMap(new FlatMapFunction<Flight, Tuple7<String, String, Boolean, Boolean, Boolean, Integer, Integer>>() {
             @Override
@@ -228,7 +231,7 @@ public class TrafficAnalysis {
             }
         });
 
-        DataSet<Tuple8<String, String, Boolean, Boolean, Boolean, Integer, Double, Boolean>> outgoingMarginals = outgoingMarginalsAgg.join(APBounds, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where(0,1,2,3,4).equalTo(0,1,2,3,4).with(
+        DataSet<Tuple8<String, String, Boolean, Boolean, Boolean, Integer, Double, Boolean>> outgoingMarginals = outgoingMarginalsAgg.join(APBounds, JOIN_HINT).where(0,1,2,3,4).equalTo(0,1,2,3,4).with(
                 new JoinFunction<Tuple8<String, String, Boolean, Boolean, Boolean, Integer, Double, Boolean>, Tuple7<String, String, Boolean, Boolean, Boolean, Integer, Integer>, Tuple8<String, String, Boolean, Boolean, Boolean, Integer, Double, Boolean>>() {
                     @Override
                     public Tuple8<String, String, Boolean, Boolean, Boolean, Integer, Double, Boolean> join(Tuple8<String, String, Boolean, Boolean, Boolean, Integer, Double, Boolean> marginal, Tuple7<String, String, Boolean, Boolean, Boolean, Integer, Integer> midtBound) throws Exception {
@@ -237,7 +240,7 @@ public class TrafficAnalysis {
                     }
                 });
 
-        DataSet<Tuple8<String, String, Boolean, Boolean, Boolean, Integer, Double, Boolean>> incomingMarginals = incomingMarginalsAgg.join(APBounds, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where(0,1,2,3,4).equalTo(0,1,2,3,4).with(
+        DataSet<Tuple8<String, String, Boolean, Boolean, Boolean, Integer, Double, Boolean>> incomingMarginals = incomingMarginalsAgg.join(APBounds, JOIN_HINT).where(0,1,2,3,4).equalTo(0,1,2,3,4).with(
                 new JoinFunction<Tuple8<String, String, Boolean, Boolean, Boolean, Integer, Double, Boolean>, Tuple7<String, String, Boolean, Boolean, Boolean, Integer, Integer>, Tuple8<String, String, Boolean, Boolean, Boolean, Integer, Double, Boolean>>() {
                     @Override
                     public Tuple8<String, String, Boolean, Boolean, Boolean, Integer, Double, Boolean> join(Tuple8<String, String, Boolean, Boolean, Boolean, Integer, Double, Boolean> marginal, Tuple7<String, String, Boolean, Boolean, Boolean, Integer, Integer> midtBound) throws Exception {
@@ -374,24 +377,24 @@ public class TrafficAnalysis {
         IterativeDataSet<Tuple8<String, String, Boolean, Boolean, Boolean, Integer, Double, Boolean>> initial = outgoingMarginals.union(incomingMarginals).iterate(MAX_ITERATIONS);
 
         DataSet<Tuple7<String, String, String, Boolean, Boolean, Boolean, Double>> KiFractions = distances
-                .join(initial.filter(new IncomingFilter()), JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where(1,2,3,4,5).equalTo(0,1,2,3,4).with(new KJoiner());
+                .join(initial.filter(new IncomingFilter()), JOIN_HINT).where(1,2,3,4,5).equalTo(0,1,2,3,4).with(new KJoiner());
 
         outgoingMarginals = KiFractions.groupBy(0,2,3,4,5).sum(6)
-                .join(initial.filter(new OutgoingFilter()), JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where(0,2,3,4,5).equalTo(0,1,2,3,4).with(new KUpdater());
+                .join(initial.filter(new OutgoingFilter()), JOIN_HINT).where(0,2,3,4,5).equalTo(0,1,2,3,4).with(new KUpdater());
 
         DataSet<Tuple7<String, String, String, Boolean, Boolean, Boolean, Double>> KjFractions = distances
-                .join(outgoingMarginals, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where(0,2,3,4,5).equalTo(0,1,2,3,4).with(new KJoiner());
+                .join(outgoingMarginals, JOIN_HINT).where(0,2,3,4,5).equalTo(0,1,2,3,4).with(new KJoiner());
 
         incomingMarginals = KjFractions.groupBy(1,2,3,4,5).sum(6)
-                .join(initial.filter(new IncomingFilter()), JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where(1,2,3,4,5).equalTo(0,1,2,3,4).with(new KUpdater());
+                .join(initial.filter(new IncomingFilter()), JOIN_HINT).where(1,2,3,4,5).equalTo(0,1,2,3,4).with(new KUpdater());
 
         DataSet<Tuple8<String, String, Boolean, Boolean, Boolean, Integer, Double, Boolean>> iteration = outgoingMarginals.union(incomingMarginals);
         DataSet<Tuple8<String, String, Boolean, Boolean, Boolean, Integer, Double, Boolean>> result = initial.closeWith(iteration);
         /* IPF END */
 
         DataSet<Tuple5<String, String, String, Double, SerializableVector>> trafficMatrix = distances
-                .join(result.filter(new OutgoingFilter()), JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where(0,2,3,4,5).equalTo(0,1,2,3,4).with(new TMJoinerOut())
-                .join(result.filter(new IncomingFilter()), JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where(1,2,3,4,5).equalTo(0,1,2,3,4).with(new TMJoinerIn())
+                .join(result.filter(new OutgoingFilter()), JOIN_HINT).where(0,2,3,4,5).equalTo(0,1,2,3,4).with(new TMJoinerOut())
+                .join(result.filter(new IncomingFilter()), JOIN_HINT).where(1,2,3,4,5).equalTo(0,1,2,3,4).with(new TMJoinerIn())
                 .project(0,1,2,6,7);
 
         DataSet<Tuple5<String, String, String, Double, SerializableVector>> TMWithMIDT = trafficMatrix.coGroup(ODBounds).where(0,1,2).equalTo(0,1,2).with(
@@ -418,14 +421,14 @@ public class TrafficAnalysis {
             }
         });
 
-        TMWithMIDT.project(0,1,2,3).writeAsCsv(outputPath + "trafficMatrix", "\n", ",", FileSystem.WriteMode.OVERWRITE);
+        TMWithMIDT.project(0,1,2,3).writeAsCsv(outputPath + "trafficMatrix", "\n", ",", OVERWRITE);
 
         //midt.groupBy(0,1,2).sortGroup(0, Order.ASCENDING).first(10000).writeAsCsv(outputPath + "groupedMIDT", "\n", ",", FileSystem.WriteMode.OVERWRITE);
         DataSet<Tuple4<String, String, String, LogitOptimizable>> trainedLogit = midt.groupBy(0,1,2).reduceGroup(new LogitTrainer());
         //trainedLogit.writeAsCsv(outputPath + "logitResult", "\n", ",", FileSystem.WriteMode.OVERWRITE);
 
         DataSet<Tuple6<String, String, String, Double, SerializableVector, LogitOptimizable>> TMWithWeights = TMWithMIDT
-                .join(trainedLogit, JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE).where(0,1,2).equalTo(0,1,2).with(new WeightTMJoiner());
+                .join(trainedLogit, JOIN_HINT).where(0,1,2).equalTo(0,1,2).with(new WeightTMJoiner());
 
         //TMWithWeights.groupBy(0,1,2).sortGroup(2, Order.ASCENDING).first(10000000).writeAsCsv(outputPath + "tmWeights", "\n", ",", FileSystem.WriteMode.OVERWRITE);
 
@@ -435,9 +438,9 @@ public class TrafficAnalysis {
 
         DataSet<Itinerary> estimate = itinerariesWithMIDT.coGroup(allWeighted).where(0,1,2).equalTo(0,1,2).with(new TrafficEstimator());
 
-        estimate.groupBy(0,1,2).sortGroup(15, Order.DESCENDING).first(1000000000).writeAsCsv(outputPath + "ItineraryEstimate", "\n", ",", FileSystem.WriteMode.OVERWRITE);
+        estimate.groupBy(0,1,2).sortGroup(15, Order.DESCENDING).first(1000000000).writeAsCsv(outputPath + "ItineraryEstimate", "\n", ",", OVERWRITE);
 
-        estimate.groupBy(0,1).reduceGroup(new ODSum()).writeAsCsv(outputPath + "ODSum", "\n", ",", FileSystem.WriteMode.OVERWRITE).setParallelism(1);
+        estimate.groupBy(0,1).reduceGroup(new ODSum()).writeAsCsv(outputPath + "ODSum", "\n", ",", OVERWRITE).setParallelism(1);
 
         env.execute("TrafficAnalysis");
     }
