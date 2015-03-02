@@ -48,16 +48,20 @@ public class TrafficAnalysis {
         add("US");
     }};
 
+    public final static SimpleDateFormat dayFormat = new SimpleDateFormat("ddMMyyyy");
 
+    private static String oriPath = "hdfs:///user/rwaury/input2/ori_por_public.csv";
+    private static String regionPath = "hdfs:///user/rwaury/input2/ori_country_region_info.csv";
+    private static String midtPath = "hdfs:///user/rwaury/input2/MIDTTotalHits.csv";
     private static String outputPath = "hdfs:///user/rwaury/output2/flights/";
 
     public static void main(String[] args) throws Exception {
         ExecutionEnvironment env = ExecutionEnvironment.getExecutionEnvironment();
 
-        DataSet<Tuple4<String, String, String, String>> airportCountryNR = env.readTextFile("hdfs:///user/rwaury/input2/ori_por_public.csv")
+        DataSet<Tuple4<String, String, String, String>> airportCountryNR = env.readTextFile(oriPath)
                 .flatMap(new AirportCountryExtractor());
 
-        DataSet<Tuple2<String, String>> regionInfo = env.readTextFile("hdfs:///user/rwaury/input2/ori_country_region_info.csv").map(new RegionExtractor());
+        DataSet<Tuple2<String, String>> regionInfo = env.readTextFile(regionPath).map(new RegionExtractor());
         //regionInfo.writeAsCsv(outputPath + "regionInfo", "\n", ",", FileSystem.WriteMode.OVERWRITE).setParallelism(1);
 
         DataSet<Tuple4<String, String, String, String>> airportCountry = airportCountryNR.join(regionInfo).where(2).equalTo(0).with(new RegionJoiner());
@@ -73,16 +77,15 @@ public class TrafficAnalysis {
         DataSet<Itinerary> itineraries = nonStopItineraries.union(twoLegItineraries).union(threeLegItineraries);
 
         DataSet<Tuple3<String, String, Integer>> flightBounds = nonStopConnections.map(new MapFunction<Flight, Tuple3<String, String, Integer>>() {
-            SimpleDateFormat format = new SimpleDateFormat("ddMMyyyy");
             @Override
             public Tuple3<String, String, Integer> map(Flight flight) throws Exception {
                 Date d = new Date(flight.getDepartureTimestamp());
-                return new Tuple3<String, String, Integer>(flight.getAirline() + flight.getFlightNumber(), format.format(d), flight.getMaxCapacity());
+                return new Tuple3<String, String, Integer>(flight.getAirline() + flight.getFlightNumber(), dayFormat.format(d), flight.getMaxCapacity());
             }
         }).groupBy(0,1).min(2);
         flightBounds.writeAsCsv(outputPath + "flightCapacity", "\n", ",", FileSystem.WriteMode.OVERWRITE).setParallelism(1);
 
-        DataSet<String> midtStrings = env.readTextFile("hdfs:///user/rwaury/input2/MIDTTotalHits.csv");
+        DataSet<String> midtStrings = env.readTextFile(midtPath);
         DataSet<MIDT> midt = midtStrings.flatMap(new MIDTParser()).map(new MIDTCompressor()).groupBy(0,1,2,3,4,5,6,7).reduceGroup(new MIDTGrouper());
         DataSet<Tuple5<String, String, String, Integer, Integer>> ODLowerBound = midt.map(new LowerBoundExtractor()).groupBy(0,1,2).sum(3).andSum(4);
 
@@ -148,7 +151,6 @@ public class TrafficAnalysis {
         ODBounds.writeAsCsv(outputPath + "ODBounds", "\n", ",", FileSystem.WriteMode.OVERWRITE).setParallelism(1);
 
         DataSet<Tuple7<String, String, Boolean, Boolean, Boolean, Integer, Integer>> inOutCapa = nonStopConnections.flatMap(new FlatMapFunction<Flight, Tuple7<String, String, Boolean, Boolean, Boolean, Integer, Integer>>() {
-            SimpleDateFormat format = new SimpleDateFormat("ddMMyyyy");
             @Override
             public void flatMap(Flight flight, Collector<Tuple7<String, String, Boolean, Boolean, Boolean, Integer, Integer>> out) throws Exception {
                 if(flight.getLegCount() > 1) {
@@ -158,7 +160,7 @@ public class TrafficAnalysis {
                     return;
                 }
                 Date date = new Date(flight.getDepartureTimestamp());
-                String dayString = format.format(date);
+                String dayString = dayFormat.format(date);
                 boolean isInterRegional = !flight.getOriginRegion().equals(flight.getDestinationRegion());
                 boolean isInternational = !flight.getOriginCountry().equals(flight.getDestinationCountry());
                 boolean isInterState = true;
@@ -245,14 +247,13 @@ public class TrafficAnalysis {
                 });
 
         DataSet<Tuple8<String, String, Boolean, Boolean, Boolean, String, Double, Integer>> nonStop = nonStopConnections.flatMap(new FlatMapFunction<Flight, Tuple8<String, String, Boolean, Boolean, Boolean, String, Double, Integer>>() {
-            SimpleDateFormat format = new SimpleDateFormat("ddMMyyyy");
             @Override
             public void flatMap(Flight value, Collector<Tuple8<String, String, Boolean, Boolean, Boolean, String, Double, Integer>> out) throws Exception {
                 if(value.getDepartureTimestamp() > lastPossibleTimestamp || value.getDepartureTimestamp() < firstPossibleTimestamp) {
                     return;
                 }
                 Date date = new Date(value.getDepartureTimestamp());
-                String dayString = format.format(date);
+                String dayString = dayFormat.format(date);
                 long duration = value.getArrivalTimestamp() - value.getDepartureTimestamp();
                 if (duration <= 0L)
                     throw new Exception("Value error: " + value.toString());
@@ -270,14 +271,13 @@ public class TrafficAnalysis {
         });
 
         DataSet<Tuple8<String, String, Boolean, Boolean, Boolean, String, Double, Integer>> twoLeg = twoLegConnections.flatMap(new FlatMapFunction<Tuple2<Flight, Flight>, Tuple8<String, String, Boolean, Boolean, Boolean, String, Double, Integer>>() {
-            SimpleDateFormat format = new SimpleDateFormat("ddMMyyyy");
             @Override
             public void flatMap(Tuple2<Flight, Flight> value, Collector<Tuple8<String, String, Boolean, Boolean, Boolean, String, Double, Integer>> out) throws Exception {
                 if(value.f0.getDepartureTimestamp() > lastPossibleTimestamp || value.f0.getDepartureTimestamp() < firstPossibleTimestamp) {
                     return;
                 }
                 Date date = new Date(value.f0.getDepartureTimestamp());
-                String dayString = format.format(date);
+                String dayString = dayFormat.format(date);
                 long flight1 = value.f0.getArrivalTimestamp() - value.f0.getDepartureTimestamp();
                 long wait1 = (long) (WAITING_FACTOR * (value.f1.getDepartureTimestamp() - value.f0.getArrivalTimestamp()));
                 long flight2 = value.f1.getArrivalTimestamp() - value.f1.getDepartureTimestamp();
@@ -298,14 +298,13 @@ public class TrafficAnalysis {
         });
 
         DataSet<Tuple8<String, String, Boolean, Boolean, Boolean, String, Double, Integer>> threeLeg = threeLegConnections.flatMap(new FlatMapFunction<Tuple3<Flight, Flight, Flight>, Tuple8<String, String, Boolean, Boolean, Boolean, String, Double, Integer>>() {
-            SimpleDateFormat format = new SimpleDateFormat("ddMMyyyy");
             @Override
             public void flatMap(Tuple3<Flight, Flight, Flight> value, Collector<Tuple8<String, String, Boolean, Boolean, Boolean, String, Double, Integer>> out) throws Exception {
                 if(value.f0.getDepartureTimestamp() > lastPossibleTimestamp || value.f0.getDepartureTimestamp() < firstPossibleTimestamp) {
                     return;
                 }
                 Date date = new Date(value.f0.getDepartureTimestamp());
-                String dayString = format.format(date);
+                String dayString = dayFormat.format(date);
                 long flight1 = value.f0.getArrivalTimestamp() - value.f0.getDepartureTimestamp();
                 long wait1 = (long) (WAITING_FACTOR * (value.f1.getDepartureTimestamp() - value.f0.getArrivalTimestamp()));
                 long flight2 = value.f1.getArrivalTimestamp() - value.f1.getDepartureTimestamp();

@@ -11,8 +11,6 @@ public class MIDTParser implements FlatMapFunction<String, MIDT> {
 
     private final static String HEADER = "$";
 
-    SimpleDateFormat format = new SimpleDateFormat("ddMMyyyy");
-
     @Override
     public void flatMap(String s, Collector<MIDT> out) throws Exception {
         if(s.startsWith(HEADER)) {
@@ -69,7 +67,7 @@ public class MIDTParser implements FlatMapFunction<String, MIDT> {
         }
         long departureTimestamp = TrafficAnalysis.firstPossibleTimestamp + (departureDay*24L*60L*60L*1000L) + 1L;
         Date date = new Date(departureTimestamp);
-        String dayString = format.format(date);
+        String dayString = TrafficAnalysis.dayFormat.format(date);
         MIDT result = new MIDT(origin, destination, dayString,
                 flight1, flight2, flight3, flight4, flight5, travelTime, waitingTime,
                 segmentCount, pax);

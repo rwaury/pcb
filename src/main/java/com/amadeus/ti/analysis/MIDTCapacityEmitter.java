@@ -13,8 +13,6 @@ import java.util.HashMap;
 
 public class MIDTCapacityEmitter extends RichFlatMapFunction<String, Tuple7<String, String, Boolean, Boolean, Boolean, Integer, Integer>> {
 
-    private SimpleDateFormat format = new SimpleDateFormat("ddMMyyyy");
-
     private HashMap<String, String> APToRegion;
     private HashMap<String, String> APToCountry;
     private HashMap<String, String> APToState;
@@ -49,7 +47,7 @@ public class MIDTCapacityEmitter extends RichFlatMapFunction<String, Tuple7<Stri
         long departureDay = Long.parseLong(tmp[11].trim())-1;
         long departureTimestamp = TrafficAnalysis.firstPossibleTimestamp + (departureDay*24L*60L*60L*1000L);
         Date date = new Date(departureTimestamp);
-        String dayString = format.format(date);
+        String dayString = TrafficAnalysis.dayFormat.format(date);
         if(departureDay > 6) {
             throw new Exception("Value error: " + s);
         }
