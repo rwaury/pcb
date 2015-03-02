@@ -4,9 +4,6 @@ import org.apache.commons.math3.linear.Array2DRowRealMatrix;
 import org.apache.commons.math3.linear.ArrayRealVector;
 import org.apache.commons.math3.linear.RealVector;
 
-/**
- * Created by robert on 02/03/15.
- */
 public class TAUtil {
 
     public static double decayingFunction(double minTravelTime, double maxTravelTime, double avgTravelTime, double distance, double count, boolean isIntercontinental, boolean isInternational, boolean isInterstate) {

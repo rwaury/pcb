@@ -3,6 +3,7 @@ package com.amadeus.ti.analysis;
 import org.apache.flink.api.common.functions.RichFlatMapFunction;
 import org.apache.flink.api.java.tuple.Tuple4;
 import org.apache.flink.api.java.tuple.Tuple7;
+import org.apache.flink.api.java.tuple.Tuple8;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.util.Collector;
 
@@ -19,16 +20,15 @@ public class MIDTCapacityEmitter extends RichFlatMapFunction<String, Tuple7<Stri
 
     @Override
     public void open(Configuration parameters) {
-        Collection<Tuple4<String, String, String, String>> broadcastSet = this.getRuntimeContext().getBroadcastVariable(TrafficAnalysis.AP_COUNTRY_MAPPING);
+        Collection<Tuple8<String, String, String, String, String, Double, Double, String>> broadcastSet = this.getRuntimeContext().getBroadcastVariable(TrafficAnalysis.AP_GEO_DATA);
         this.APToRegion = new HashMap<String, String>(broadcastSet.size());
         this.APToCountry = new HashMap<String, String>(broadcastSet.size());
         this.APToState = new HashMap<String, String>(200);
-
-        for(Tuple4<String, String, String, String> t : broadcastSet) {
-            this.APToRegion.put(t.f0, t.f1);
-            this.APToCountry.put(t.f0, t.f2);
-            if(TrafficAnalysis.countriesWithStates.contains(t.f2)) {
-                this.APToState.put(t.f0, t.f3);
+        for(Tuple8<String, String, String, String, String, Double, Double, String> t : broadcastSet) {
+            this.APToRegion.put(t.f0, t.f4);
+            this.APToCountry.put(t.f0, t.f3);
+            if(TrafficAnalysis.countriesWithStates.contains(t.f3)) {
+                this.APToState.put(t.f0, t.f2);
             }
         }
     }

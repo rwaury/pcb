@@ -1,9 +1,6 @@
 package com.amadeus.ti.analysis;
 
-import com.amadeus.ti.pcb.CBUtil;
-import com.amadeus.ti.pcb.Flight;
-import com.amadeus.ti.pcb.FlightOutput;
-import com.amadeus.ti.pcb.RegionExtractor;
+import com.amadeus.ti.pcb.*;
 import org.apache.flink.api.common.functions.*;
 import org.apache.flink.api.common.operators.Order;
 import org.apache.flink.api.common.operators.base.JoinOperatorBase;
@@ -34,7 +31,7 @@ public class TrafficAnalysis {
 
     public static final int MAX_ITERATIONS = 10;
 
-    public static String AP_COUNTRY_MAPPING = "AirportCountryMappingBroadcastSet";
+    public static String AP_GEO_DATA = "AirportGeoDataBroadcastSet";
 
     public static String INVERTED_COVARIANCE_MATRIX = "InvertedCovarianceMatrixBroadcastSet";
 
@@ -48,12 +45,14 @@ public class TrafficAnalysis {
         add("US");
     }};
 
+    public final static String NON_US_POINT = "XXX";
+
     public final static SimpleDateFormat dayFormat = new SimpleDateFormat("ddMMyyyy");
 
     private static String oriPath = "hdfs:///user/rwaury/input2/ori_por_public.csv";
     private static String regionPath = "hdfs:///user/rwaury/input2/ori_country_region_info.csv";
     private static String midtPath = "hdfs:///user/rwaury/input2/MIDTTotalHits.csv";
-    private static String outputPath = "hdfs:///user/rwaury/output2/flights/";
+    private static String outputPath = "hdfs:///user/rwaury/output3/flights/";
 
     private static final JoinOperatorBase.JoinHint JOIN_HINT = JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE;
     private static final FileSystem.WriteMode OVERWRITE = FileSystem.WriteMode.OVERWRITE;
@@ -61,14 +60,16 @@ public class TrafficAnalysis {
     public static void main(String[] args) throws Exception {
         ExecutionEnvironment env = ExecutionEnvironment.getExecutionEnvironment();
 
-        DataSet<Tuple4<String, String, String, String>> airportCountryNR = env.readTextFile(oriPath)
-                .flatMap(new AirportCountryExtractor());
+        // extract coordinates of all known airports
+        DataSet<Tuple8<String, String, String, String, String, Double, Double, String>> airportCoordinatesNR =
+                env.readTextFile(oriPath).flatMap(new AirportCoordinateExtractor());
 
+        // get IATA region information for each airport
         DataSet<Tuple2<String, String>> regionInfo = env.readTextFile(regionPath).map(new RegionExtractor());
-        //regionInfo.writeAsCsv(outputPath + "regionInfo", "\n", ",", FileSystem.WriteMode.OVERWRITE).setParallelism(1);
+        DataSet<Tuple8<String, String, String, String, String, Double, Double, String>> airportCountry =
+                airportCoordinatesNR.join(regionInfo).where(3).equalTo(0).with(new RegionJoiner());
 
-        DataSet<Tuple4<String, String, String, String>> airportCountry = airportCountryNR.join(regionInfo).where(2).equalTo(0).with(new RegionJoiner());
-        //airportCountry.writeAsCsv(outputPath + "airportCountry", "\n", ",", FileSystem.WriteMode.OVERWRITE).setParallelism(1);
+        airportCountry.writeAsCsv(outputPath + "airportCountry", "\n", ",", OVERWRITE).setParallelism(1);
 
         DataSet<Flight> nonStopConnections = env.readFile(new FlightOutput.NonStopFullInputFormat(), outputPath + "oneFull");
         DataSet<Tuple2<Flight, Flight>> twoLegConnections = env.readFile(new FlightOutput.TwoLegFullInputFormat(), outputPath + "twoFull");
@@ -93,7 +94,8 @@ public class TrafficAnalysis {
         DataSet<Tuple5<String, String, String, Integer, Integer>> ODLowerBound = midt.map(new LowerBoundExtractor()).groupBy(0,1,2).sum(3).andSum(4);
 
         // group sort and first-1 is necessary to exclude multileg connections that yield the same OD (only the fastest is included)
-        DataSet<Itinerary> itinerariesWithMIDT = itineraries.groupBy(0,1,2,3,4,5,6,7).sortGroup(10, Order.ASCENDING).first(1).coGroup(midt).where(0,1,2,3,4,5,6,7).equalTo(0,1,2,3,4,5,6,7).with(new CoGroupFunction<Itinerary, MIDT, Itinerary>() {
+        DataSet<Itinerary> itinerariesWithMIDT = itineraries.groupBy(0,1,2,3,4,5,6,7).sortGroup(10, Order.ASCENDING).first(1).coGroup(midt)
+                .where(0,1,2,3,4,5,6,7).equalTo(0,1,2,3,4,5,6,7).with(new CoGroupFunction<Itinerary, MIDT, Itinerary>() {
             @Override
             public void coGroup(Iterable<Itinerary> itineraries, Iterable<MIDT> midts, Collector<Itinerary> out) throws Exception {
                 Iterator<Itinerary> itinIter = itineraries.iterator();
@@ -118,7 +120,7 @@ public class TrafficAnalysis {
             }
         });
 
-        DataSet<Tuple7<String, String, Boolean, Boolean, Boolean, Integer, Integer>> APBoundsAgg = midtStrings.flatMap(new MIDTCapacityEmitter()).withBroadcastSet(airportCountry, AP_COUNTRY_MAPPING);
+        DataSet<Tuple7<String, String, Boolean, Boolean, Boolean, Integer, Integer>> APBoundsAgg = midtStrings.flatMap(new MIDTCapacityEmitter()).withBroadcastSet(airportCountry, AP_GEO_DATA);
         DataSet<Tuple7<String, String, Boolean, Boolean, Boolean, Integer, Integer>> APBounds = APBoundsAgg.groupBy(0,1,2,3,4).sum(5).andSum(6);
         //APBounds.writeAsCsv(outputPath + "APBounds", "\n", ",", FileSystem.WriteMode.OVERWRITE);
 
@@ -153,7 +155,8 @@ public class TrafficAnalysis {
                 });
         ODBounds.writeAsCsv(outputPath + "ODBounds", "\n", ",", OVERWRITE).setParallelism(1);
 
-        DataSet<Tuple7<String, String, Boolean, Boolean, Boolean, Integer, Integer>> inOutCapa = nonStopConnections.flatMap(new FlatMapFunction<Flight, Tuple7<String, String, Boolean, Boolean, Boolean, Integer, Integer>>() {
+        DataSet<Tuple7<String, String, Boolean, Boolean, Boolean, Integer, Integer>> inOutCapa = nonStopConnections.flatMap(
+                new FlatMapFunction<Flight, Tuple7<String, String, Boolean, Boolean, Boolean, Integer, Integer>>() {
             @Override
             public void flatMap(Flight flight, Collector<Tuple7<String, String, Boolean, Boolean, Boolean, Integer, Integer>> out) throws Exception {
                 if(flight.getLegCount() > 1) {
@@ -525,22 +528,6 @@ public class TrafficAnalysis {
         @Override
         public Tuple6<String, String, String, Double, SerializableVector, LogitOptimizable> join(Tuple5<String, String, String, Double, SerializableVector> tmEntry, Tuple4<String, String, String, LogitOptimizable> logit) throws Exception {
             return new Tuple6<String, String, String, Double, SerializableVector, LogitOptimizable>(tmEntry.f0, tmEntry.f1, tmEntry.f2, tmEntry.f3, tmEntry.f4, logit.f3);
-        }
-    }
-
-    // get all itineraries that have two or more flights
-    public static final class SecondFlight implements FilterFunction<Tuple10<String, String, String, String, String, String, Long, Integer, Integer, Double>> {
-        @Override
-        public boolean filter(Tuple10<String, String, String, String, String, String, Long, Integer, Integer, Double> tuple) throws Exception {
-            return !tuple.f4.isEmpty();
-        }
-    }
-
-    // get all itineraries that have three or more flights
-    public static final class ThirdFlight implements FilterFunction<Tuple10<String, String, String, String, String, String, Long, Integer, Integer, Double>> {
-        @Override
-        public boolean filter(Tuple10<String, String, String, String, String, String, Long, Integer, Integer, Double> tuple) throws Exception {
-            return !tuple.f5.isEmpty();
         }
     }
 

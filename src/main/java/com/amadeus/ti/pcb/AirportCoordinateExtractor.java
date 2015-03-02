@@ -62,6 +62,7 @@ public class AirportCoordinateExtractor implements FlatMapFunction<String, Tuple
         } else {
             stateCode = "";
         }
-        out.collect(new Tuple8<String, String, String, String, String, Double, Double, String>(iataCode, cityCode, stateCode, countryCode, "", latitude, longitude, icaoCode));
+        String regionCode = "";
+        out.collect(new Tuple8<String, String, String, String, String, Double, Double, String>(iataCode, cityCode, stateCode, countryCode, regionCode, latitude, longitude, icaoCode));
     }
 }
