@@ -20,7 +20,8 @@ public class MIDTCapacityEmitter extends RichFlatMapFunction<String, Tuple7<Stri
 
     @Override
     public void open(Configuration parameters) {
-        Collection<Tuple8<String, String, String, String, String, Double, Double, String>> broadcastSet = this.getRuntimeContext().getBroadcastVariable(TrafficAnalysis.AP_GEO_DATA);
+        Collection<Tuple8<String, String, String, String, String, Double, Double, String>> broadcastSet =
+                this.getRuntimeContext().getBroadcastVariable(TrafficAnalysis.AP_GEO_DATA);
         this.APToRegion = new HashMap<String, String>(broadcastSet.size());
         this.APToCountry = new HashMap<String, String>(broadcastSet.size());
         this.APToState = new HashMap<String, String>(200);

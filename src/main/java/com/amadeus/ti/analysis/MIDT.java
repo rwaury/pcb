@@ -1,11 +1,10 @@
 package com.amadeus.ti.analysis;
 
-import org.apache.flink.api.java.tuple.Tuple12;
+import org.apache.flink.api.java.tuple.Tuple14;
 
-/**
- * Created by robert on 02/02/15.
- */
-public class MIDT extends Tuple12<String, String, String, String, String, String, String, String, Integer, Integer, Integer, Integer> {
+import java.util.HashSet;
+
+public class MIDT extends Tuple14<String, String, String, String, String, String, String, String, Integer, Integer, Integer, Integer, Double, Integer> {
 
     public MIDT() {
         super();
@@ -13,7 +12,7 @@ public class MIDT extends Tuple12<String, String, String, String, String, String
 
     public MIDT(String origin, String destination, String day,
                 String flight1, String flight2, String flight3, String flight4, String flight5,
-                Integer travelTime, Integer waitingTime, Integer legCount, Integer pax) {
+                Integer travelTime, Integer waitingTime, Integer legCount, Integer pax, Double geoDetour, Integer numCountries) {
         this.f0 = origin;
         this.f1 = destination;
         this.f2 = day;
@@ -26,6 +25,26 @@ public class MIDT extends Tuple12<String, String, String, String, String, String
         this.f9 = waitingTime;
         this.f10 = legCount;
         this.f11 = pax;
+        this.f12 = geoDetour;
+        this.f13 = numCountries;
+    }
+
+    public int getNumAirlines() {
+        HashSet<String> airlines = new HashSet<String>(5);
+        airlines.add(this.f3.substring(0,2));
+        if(!this.f4.isEmpty()) {
+            airlines.add(this.f4.substring(0,2));
+        }
+        if(!this.f5.isEmpty()) {
+            airlines.add(this.f5.substring(0,2));
+        }
+        if(!this.f6.isEmpty()) {
+            airlines.add(this.f6.substring(0,2));
+        }
+        if(!this.f7.isEmpty()) {
+            airlines.add(this.f7.substring(0,2));
+        }
+        return Math.max(1, airlines.size());
     }
 
 }

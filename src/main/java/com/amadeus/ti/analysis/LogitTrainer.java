@@ -24,7 +24,7 @@ public class LogitTrainer implements GroupReduceFunction<MIDT, Tuple4<String, St
                 minTravelTime = midt.f8;
             }
             double percentageWaiting = (midt.f8 == 0 || midt.f9 == 0) ? 0.0 : midt.f9/midt.f8;
-            trainingData.add(new LogitOptimizable.TrainingData(midt.f8, percentageWaiting, midt.f10, midt.f11));
+            trainingData.add(new LogitOptimizable.TrainingData(midt.f8, percentageWaiting, midt.f10, midt.f12, midt.f13, midt.getNumAirlines(), midt.f11));
         }
         if(trainingData.size() < 2) {
             return;

@@ -1,12 +1,16 @@
 package com.amadeus.ti.analysis;
 
-import org.apache.flink.api.common.functions.GroupReduceFunction;
+import org.apache.flink.api.common.functions.RichGroupReduceFunction;
+import org.apache.flink.api.java.tuple.Tuple8;
+import org.apache.flink.configuration.Configuration;
 import org.apache.flink.util.Collector;
 
+import java.util.Collection;
+import java.util.HashMap;
 import java.util.Iterator;
 
 // merge MIDT data from different GDS systems and booking locations
-public class MIDTGrouper implements GroupReduceFunction<MIDT, MIDT> {
+public class MIDTGrouper extends RichGroupReduceFunction<MIDT, MIDT> {
 
     @Override
     public void reduce(Iterable<MIDT> midts, Collector<MIDT> out) throws Exception {
@@ -19,7 +23,7 @@ public class MIDTGrouper implements GroupReduceFunction<MIDT, MIDT> {
             paxSum += midt.f11;
             count++;
         }
-        MIDT result = new MIDT(midt.f0, midt.f1, midt.f2, midt.f3, midt.f4, midt.f5, midt.f6, midt.f7, midt.f8, midt.f9, midt.f10, paxSum);
+        MIDT result = new MIDT(midt.f0, midt.f1, midt.f2, midt.f3, midt.f4, midt.f5, midt.f6, midt.f7, midt.f8, midt.f9, midt.f10, paxSum, midt.f12, midt.f13);
         out.collect(result);
     }
 }

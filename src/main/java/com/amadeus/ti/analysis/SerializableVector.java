@@ -8,9 +8,6 @@ import org.apache.flink.types.Value;
 import java.io.IOException;
 import java.lang.reflect.Array;
 
-/**
- * Created by robert on 09/02/15.
- */
 public class SerializableVector implements Value {
 
     private ArrayRealVector vector = null;

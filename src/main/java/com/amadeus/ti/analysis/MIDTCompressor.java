@@ -30,6 +30,6 @@ public class MIDTCompressor implements MapFunction<MIDT, MIDT> {
         if(flight4.equals(flight5)) {
             flight5 = "";
         }
-        return new MIDT(midt.f0, midt.f1, midt.f2, flight1, flight2, flight3, flight4, flight5, midt.f8, midt.f9, midt.f10, midt.f11);
+        return new MIDT(midt.f0, midt.f1, midt.f2, flight1, flight2, flight3, flight4, flight5, midt.f8, midt.f9, midt.f10, midt.f11, midt.f12, midt.f13);
     }
 }

@@ -6,7 +6,7 @@ import java.util.ArrayList;
 
 public class LogitOptimizable extends SerializableVector implements Optimizable.ByGradientValue {
 
-    private static int FEATURE_COUNT = 3;
+    private static int FEATURE_COUNT = 6;
 
     private ArrayList<TrainingData> trainingData;
 
@@ -145,15 +145,18 @@ public class LogitOptimizable extends SerializableVector implements Optimizable.
         }
     }
 
-    public static double[] toArray(Itinerary iter, int minTime) {
+    public static double[] toArray(Itinerary itinerary, int minTime) {
         if(minTime < 1) {
             minTime = 1;
         }
         double[] features = new double[FEATURE_COUNT+1];
         features[0] = 1.0; // w0 + w1x1 + ...
-        features[1] = iter.f10/minTime;
-        features[2] = iter.f11/iter.f10;
-        features[3] = (double) iter.f12;
+        features[1] = itinerary.f10/minTime;
+        features[2] = itinerary.f11/itinerary.f10;
+        features[3] = (double) itinerary.f12;
+        features[4] = itinerary.getGeoDetour();
+        features[5] = (double)itinerary.f19;
+        features[6] = (double)itinerary.getNumAirLines();
         return features;
     }
 
@@ -175,12 +178,15 @@ public class LogitOptimizable extends SerializableVector implements Optimizable.
         public double[] features;
         public int hits;
 
-        public TrainingData(int travelTime, double percentageWaiting, int legCount, int hits) {
+        public TrainingData(int travelTime, double percentageWaiting, int legCount, double geoDetour, int numCountries, int numAirlines, int hits) {
             this.features = new double[FEATURE_COUNT+1];
             this.features[0] = 1.0; // w0 + w1x1 + ...
             this.features[1] = (double) travelTime;
             this.features[2] = percentageWaiting;
             this.features[3] = (double) legCount;
+            this.features[4] = geoDetour;
+            this.features[5] = (double) numCountries;
+            this.features[6] = (double) numAirlines;
             this.hits = hits;
         }
 

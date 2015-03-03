@@ -9,6 +9,7 @@ import org.apache.flink.util.Collector;
 
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.HashSet;
 
 public class FlightExtractor {
 
@@ -20,13 +21,17 @@ public class FlightExtractor {
                flight.getDepartureTimestamp() < TrafficAnalysis.firstPossibleTimestamp) {
                 return;
             }
+            int numCountries = 2;
+            if(CBUtil.isDomestic(flight)) {
+                numCountries = 1;
+            }
             Date date = new Date(flight.getDepartureTimestamp());
             String dayString = format.format(date);
             Double distance = CBUtil.dist(flight.getOriginLatitude(), flight.getOriginLongitude(), flight.getDestinationLatitude(), flight.getDestinationLongitude());
             Integer travelTime = Math.max((int) ((flight.getArrivalTimestamp() - flight.getDepartureTimestamp())/(60L*1000L)), 1);
             out.collect(new Itinerary(flight.getOriginAirport(), flight.getDestinationAirport(), dayString,
                     flight.getAirline() + flight.getFlightNumber(), "", "", "", "", distance, distance, travelTime, 0,
-                    flight.getLegCount(), 0, flight.getMaxCapacity(), -1, -1.0, -1.0, ""));
+                    flight.getLegCount(), 0, flight.getMaxCapacity(), -1, -1.0, -1.0, "", numCountries));
         }
     }
 
@@ -38,6 +43,11 @@ public class FlightExtractor {
                flight.f0.getDepartureTimestamp() < TrafficAnalysis.firstPossibleTimestamp) {
                 return;
             }
+            HashSet<String> countries = new HashSet<String>(3);
+            countries.add(flight.f0.getOriginCountry());
+            countries.add(flight.f0.getDestinationCountry());
+            countries.add(flight.f1.getOriginCountry());
+            countries.add(flight.f1.getDestinationCountry());
             Date date = new Date(flight.f0.getDepartureTimestamp());
             String dayString = format.format(date);
             Double directDistance = CBUtil.dist(flight.f0.getOriginLatitude(), flight.f0.getOriginLongitude(), flight.f1.getDestinationLatitude(), flight.f1.getDestinationLongitude());
@@ -49,7 +59,7 @@ public class FlightExtractor {
             Integer maxCapacity = Math.min(flight.f0.getMaxCapacity(), flight.f1.getMaxCapacity());
             out.collect(new Itinerary(flight.f0.getOriginAirport(), flight.f1.getDestinationAirport(), dayString,
                     flight.f0.getAirline() + flight.f0.getFlightNumber(), flight.f1.getAirline() + flight.f1.getFlightNumber(), "", "", "",
-                    directDistance, travelledDistance, travelTime, waitingTime, legCount, 0, maxCapacity, -1, -1.0, -1.0, ""));
+                    directDistance, travelledDistance, travelTime, waitingTime, legCount, 0, maxCapacity, -1, -1.0, -1.0, "", Math.max(1, countries.size())));
         }
     }
 
@@ -61,6 +71,13 @@ public class FlightExtractor {
                flight.f0.getDepartureTimestamp() < TrafficAnalysis.firstPossibleTimestamp) {
                 return;
             }
+            HashSet<String> countries = new HashSet<String>(4);
+            countries.add(flight.f0.getOriginCountry());
+            countries.add(flight.f0.getDestinationCountry());
+            countries.add(flight.f1.getOriginCountry());
+            countries.add(flight.f1.getDestinationCountry());
+            countries.add(flight.f2.getOriginCountry());
+            countries.add(flight.f2.getDestinationCountry());
             Date date = new Date(flight.f0.getDepartureTimestamp());
             String dayString = format.format(date);
             Double directDistance = CBUtil.dist(flight.f0.getOriginLatitude(), flight.f0.getOriginLongitude(), flight.f2.getDestinationLatitude(), flight.f2.getDestinationLongitude());
@@ -76,7 +93,7 @@ public class FlightExtractor {
             Integer maxCapacity = Math.min(flight.f0.getMaxCapacity(), Math.min(flight.f1.getMaxCapacity(), flight.f2.getMaxCapacity()));
             out.collect(new Itinerary(flight.f0.getOriginAirport(), flight.f2.getDestinationAirport(), dayString,
                     flight.f0.getAirline() + flight.f0.getFlightNumber(), flight.f1.getAirline() + flight.f1.getFlightNumber(), flight.f2.getAirline() + flight.f2.getFlightNumber(), "", "",
-                    directDistance, travelledDistance, travelTime, waitingTime, legCount, 0, maxCapacity, -1, -1.0, -1.0, ""));
+                    directDistance, travelledDistance, travelTime, waitingTime, legCount, 0, maxCapacity, -1, -1.0, -1.0, "", Math.max(1, countries.size())));
         }
     }
 
@@ -89,13 +106,17 @@ public class FlightExtractor {
                     flight.getDepartureTimestamp() < TrafficAnalysis.firstPossibleTimestamp) {
                 return;
             }
+            int numCountries = 1;
+            if(!CBUtil.isDomestic(flight)) {
+                numCountries++;
+            }
             Date date = new Date(flight.getDepartureTimestamp());
             String dayString = format.format(date);
             Double distance = CBUtil.dist(flight.getOriginLatitude(), flight.getOriginLongitude(), flight.getDestinationLatitude(), flight.getDestinationLongitude());
             Integer travelTime = Math.max((int) ((flight.getArrivalTimestamp() - flight.getDepartureTimestamp())/(60L*1000L)), 1);
             out.collect(new Itinerary(flight.getOriginAirport(), flight.getDestinationAirport(), dayString,
                     flight.getAirline() + flight.getFlightNumber(), "", "", "", "", distance, distance, travelTime, 0,
-                    flight.getLegCount(), 0, flight.getMaxCapacity(), -1, -1.0, -1.0, ""));
+                    flight.getLegCount(), 0, flight.getMaxCapacity(), -1, -1.0, -1.0, "", numCountries));
         }
     }
 
@@ -107,6 +128,11 @@ public class FlightExtractor {
                     flight.f0.getDepartureTimestamp() < TrafficAnalysis.firstPossibleTimestamp) {
                 return;
             }
+            HashSet<String> countries = new HashSet<String>(4);
+            countries.add(flight.f0.getOriginCountry());
+            countries.add(flight.f0.getDestinationCountry());
+            countries.add(flight.f1.getOriginCountry());
+            countries.add(flight.f1.getDestinationCountry());
             Date date = new Date(flight.f0.getDepartureTimestamp());
             String dayString = format.format(date);
             Double directDistance = CBUtil.dist(flight.f0.getOriginLatitude(), flight.f0.getOriginLongitude(), flight.f1.getDestinationLatitude(), flight.f1.getDestinationLongitude());
@@ -118,7 +144,7 @@ public class FlightExtractor {
             Integer maxCapacity = Math.min(flight.f0.getMaxCapacity(), flight.f1.getMaxCapacity());
             out.collect(new Itinerary(flight.f0.getOriginAirport(), flight.f1.getDestinationAirport(), dayString,
                     flight.f0.getAirline() + flight.f0.getFlightNumber(), flight.f1.getAirline() + flight.f1.getFlightNumber(), "", "", "",
-                    directDistance, travelledDistance, travelTime, waitingTime, legCount, 0, maxCapacity, -1, -1.0, -1.0, ""));
+                    directDistance, travelledDistance, travelTime, waitingTime, legCount, 0, maxCapacity, -1, -1.0, -1.0, "", Math.max(1, countries.size())));
         }
     }
 
@@ -130,6 +156,13 @@ public class FlightExtractor {
                     flight.f0.getDepartureTimestamp() < TrafficAnalysis.firstPossibleTimestamp) {
                 return;
             }
+            HashSet<String> countries = new HashSet<String>(4);
+            countries.add(flight.f0.getOriginCountry());
+            countries.add(flight.f0.getDestinationCountry());
+            countries.add(flight.f1.getOriginCountry());
+            countries.add(flight.f1.getDestinationCountry());
+            countries.add(flight.f2.getOriginCountry());
+            countries.add(flight.f2.getDestinationCountry());
             Date date = new Date(flight.f0.getDepartureTimestamp());
             String dayString = format.format(date);
             Double directDistance = CBUtil.dist(flight.f0.getOriginLatitude(), flight.f0.getOriginLongitude(), flight.f2.getDestinationLatitude(), flight.f2.getDestinationLongitude());
@@ -145,7 +178,7 @@ public class FlightExtractor {
             Integer maxCapacity = Math.min(flight.f0.getMaxCapacity(), Math.min(flight.f1.getMaxCapacity(), flight.f2.getMaxCapacity()));
             out.collect(new Itinerary(flight.f0.getOriginAirport(), flight.f2.getDestinationAirport(), dayString,
                     flight.f0.getAirline() + flight.f0.getFlightNumber(), flight.f1.getAirline() + flight.f1.getFlightNumber(), flight.f2.getAirline() + flight.f2.getFlightNumber(), "", "",
-                    directDistance, travelledDistance, travelTime, waitingTime, legCount, 0, maxCapacity, -1, -1.0, -1.0, ""));
+                    directDistance, travelledDistance, travelTime, waitingTime, legCount, 0, maxCapacity, -1, -1.0, -1.0, "", Math.max(1, countries.size())));
         }
     }
 }

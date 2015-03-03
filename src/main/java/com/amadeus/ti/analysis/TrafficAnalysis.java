@@ -88,7 +88,8 @@ public class TrafficAnalysis {
         flightBounds.writeAsCsv(outputPath + "flightCapacity", "\n", ",", OVERWRITE).setParallelism(1);
 
         DataSet<String> midtStrings = env.readTextFile(midtPath);
-        DataSet<MIDT> midt = midtStrings.flatMap(new MIDTParser()).map(new MIDTCompressor()).groupBy(0,1,2,3,4,5,6,7).reduceGroup(new MIDTGrouper());
+        DataSet<MIDT> midt = midtStrings.flatMap(new MIDTParser()).withBroadcastSet(airportCountry, AP_GEO_DATA)
+                .map(new MIDTCompressor()).groupBy(0, 1, 2, 3, 4, 5, 6, 7).reduceGroup(new MIDTGrouper());
         DataSet<Tuple5<String, String, String, Integer, Integer>> ODLowerBound = midt.map(new LowerBoundExtractor()).groupBy(0,1,2).sum(3).andSum(4);
 
         // group sort and first-1 is necessary to exclude multileg connections that yield the same OD (only the fastest is included)
