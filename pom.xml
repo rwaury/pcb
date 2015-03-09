@@ -20,13 +20,13 @@ under the License.
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 	
-	<groupId>com.amadeus.pcb</groupId>
-	<artifactId>pcb</artifactId>
-	<version>0.3</version>
+	<groupId>de.tuberlin.dima</groupId>
+	<artifactId>ti</artifactId>
+	<version>0.4</version>
 	<packaging>jar</packaging>
 
 	<name>ParallelConnectionBuilder</name>
-	<url>http://www.amadeus.com</url>
+	<url>http://www.tu-berlin.de</url>
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -106,7 +106,7 @@ under the License.
                     </descriptors>
                     <archive>
                         <manifest>
-                            <mainClass>de.tuberlin.dima.old.join.FlightConnectionJoiner</mainClass>
+                            <mainClass>de.tuberlin.dima.ti.analysis.TrafficAnalysis</mainClass>
                         </manifest>
                     </archive>
                 </configuration>
@@ -129,7 +129,7 @@ under the License.
                 <configuration>
                     <archive>
                         <manifestEntries>
-                            <program-class>de.tuberlin.dima.old.join.FlightConnectionJoiner</program-class>
+                            <program-class>de.tuberlin.dima.ti.analysis.TrafficAnalysis</program-class>
                         </manifestEntries>
                     </archive>
                 </configuration>
