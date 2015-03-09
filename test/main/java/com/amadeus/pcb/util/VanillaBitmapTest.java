@@ -1,5 +1,7 @@
 package com.amadeus.pcb.util;
 
+import de.tuberlin.dima.old.util.TimeResolution;
+import de.tuberlin.dima.old.util.VanillaBitmap;
 import junit.framework.TestCase;
 import org.junit.Test;
 

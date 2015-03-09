@@ -106,7 +106,7 @@ under the License.
                     </descriptors>
                     <archive>
                         <manifest>
-                            <mainClass>com.amadeus.pcb.join.FlightConnectionJoiner</mainClass>
+                            <mainClass>de.tuberlin.dima.old.join.FlightConnectionJoiner</mainClass>
                         </manifest>
                     </archive>
                 </configuration>
@@ -129,7 +129,7 @@ under the License.
                 <configuration>
                     <archive>
                         <manifestEntries>
-                            <program-class>com.amadeus.pcb.join.FlightConnectionJoiner</program-class>
+                            <program-class>de.tuberlin.dima.old.join.FlightConnectionJoiner</program-class>
                         </manifestEntries>
                     </archive>
                 </configuration>

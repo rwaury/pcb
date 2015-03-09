@@ -1,5 +1,7 @@
 package com.amadeus.pcb.graph;
 
+import de.tuberlin.dima.old.graph.Flight;
+import de.tuberlin.dima.old.graph.FlightConnection;
 import junit.framework.TestCase;
 import org.apache.flink.core.memory.DataInputView;
 import org.apache.flink.runtime.io.network.serialization.DataInputDeserializer;

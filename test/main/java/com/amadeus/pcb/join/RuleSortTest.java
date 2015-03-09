@@ -1,5 +1,7 @@
 package com.amadeus.pcb.join;
 
+import de.tuberlin.dima.old.join.FlightConnectionJoiner;
+import de.tuberlin.dima.old.join.MCTEntry;
 import junit.framework.TestCase;
 import org.junit.Test;
 
