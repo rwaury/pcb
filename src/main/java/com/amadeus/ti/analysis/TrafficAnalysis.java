@@ -16,6 +16,7 @@ import java.util.Date;
 
 public class TrafficAnalysis {
 
+    // calendar week 19 2014
     public static long firstPossibleTimestamp = 1399248000000L;
     public static long lastPossibleTimestamp = 1399852799000L;
 
@@ -43,7 +44,19 @@ public class TrafficAnalysis {
         add("US");
     }};
 
+    public static final boolean US_ONLY = true;
+    // black/white hole for non-domestic US traffic
     public final static String NON_US_POINT = "XXX";
+    public final static String NON_US_CITY = "XXX";
+    public final static String NON_US_STATE = "XX";
+    public final static String NON_US_COUNTRY = "XX";
+    public final static String NON_US_REGION = "XXX";
+    public final static String NON_US_ICAO = "XXXX";
+    // somewhere in the Indian Ocean halfway between Australia's west coast and the Kerguelen Islands
+    // exact opposite of the mean center of the US population
+    public final static double NON_US_LATITUDE = -37.458905;
+    public final static double NON_US_LONGITUDE = 87.69223399999998;
+
 
     public final static SimpleDateFormat dayFormat = new SimpleDateFormat("ddMMyyyy");
 
@@ -62,16 +75,26 @@ public class TrafficAnalysis {
         DataSet<Tuple8<String, String, String, String, String, Double, Double, String>> airportCoordinatesNR =
                 env.readTextFile(oriPath).flatMap(new AirportCoordinateExtractor());
 
+        airportCoordinatesNR.writeAsCsv(outputPath + "airportCoordinatesNR", "\n", ",", OVERWRITE).setParallelism(1);
+
         // get IATA region information for each airport
-        DataSet<Tuple2<String, String>> regionInfo = env.readTextFile(regionPath).map(new RegionExtractor());
+        DataSet<Tuple2<String, String>> regionInfoPartial = env.readTextFile(regionPath).map(new RegionExtractor());
+        DataSet<Tuple2<String, String>> regionInfoXXX = env.fromElements(new Tuple2<String, String>(NON_US_COUNTRY, NON_US_REGION));
+        DataSet<Tuple2<String, String>> regionInfo = regionInfoPartial.union(regionInfoXXX);
+
+        regionInfo.writeAsCsv(outputPath + "regionInfo", "\n", ",", OVERWRITE).setParallelism(1);
+
         DataSet<Tuple8<String, String, String, String, String, Double, Double, String>> airportCountry =
-                airportCoordinatesNR./*filter(new USFilter()).*/join(regionInfo).where(3).equalTo(0).with(new RegionJoiner());
+                airportCoordinatesNR.join(regionInfo).where(3).equalTo(0).with(new RegionJoiner());
 
         airportCountry.writeAsCsv(outputPath + "airportCountry", "\n", ",", OVERWRITE).setParallelism(1);
 
-        DataSet<Flight> nonStopConnections = env.readFile(new FlightOutput.NonStopFullInputFormat(), outputPath + "oneFull");
-        DataSet<Tuple2<Flight, Flight>> twoLegConnections = env.readFile(new FlightOutput.TwoLegFullInputFormat(), outputPath + "twoFull");
-        DataSet<Tuple3<Flight, Flight, Flight>> threeLegConnections = env.readFile(new FlightOutput.ThreeLegFullInputFormat(), outputPath + "threeFull");
+        DataSet<Flight> nonStopConnections = env.readFile(new FlightOutput.NonStopFullInputFormat(), outputPath + "oneFull")
+                .flatMap(new GeoInfoReplacer.GeoInfoReplacerUS1());
+        DataSet<Tuple2<Flight, Flight>> twoLegConnections = env.readFile(new FlightOutput.TwoLegFullInputFormat(), outputPath + "twoFull")
+                .flatMap(new GeoInfoReplacer.GeoInfoReplacerUS2());
+        DataSet<Tuple3<Flight, Flight, Flight>> threeLegConnections = env.readFile(new FlightOutput.ThreeLegFullInputFormat(), outputPath + "threeFull")
+                .flatMap(new GeoInfoReplacer.GeoInfoReplacerUS3());
 
         DataSet<Itinerary> nonStopItineraries = nonStopConnections.flatMap(new FlightExtractor.FlightExtractor1());
         DataSet<Itinerary> twoLegItineraries = twoLegConnections.flatMap(new FlightExtractor.FlightExtractor2());
@@ -99,7 +122,7 @@ public class TrafficAnalysis {
         DataSet<Tuple7<String, String, Boolean, Boolean, Boolean, Integer, Integer>> APBoundsAgg = midtStrings.flatMap(new MIDTCapacityEmitter())
                 .withBroadcastSet(airportCountry, AP_GEO_DATA);
         DataSet<Tuple7<String, String, Boolean, Boolean, Boolean, Integer, Integer>> APBounds = APBoundsAgg.groupBy(0,1,2,3,4).sum(5).andSum(6);
-        //APBounds.writeAsCsv(outputPath + "APBounds", "\n", ",", OVERWRITE);
+        APBounds.writeAsCsv(outputPath + "APBounds", "\n", ",", OVERWRITE).setParallelism(1);
 
         DataSet<Tuple5<String, String, String, Integer, Integer>> ODMax = itinerariesWithMIDT.groupBy(0,1,2).reduceGroup(new ODMax());
         //ODMax.writeAsCsv(outputPath + "ODMax", "\n", ",", OVERWRITE).setParallelism(1);

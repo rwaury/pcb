@@ -18,6 +18,8 @@ public class MIDTCapacityEmitter extends RichFlatMapFunction<String, Tuple7<Stri
     private HashMap<String, String> APToCountry;
     private HashMap<String, String> APToState;
 
+
+
     @Override
     public void open(Configuration parameters) {
         Collection<Tuple8<String, String, String, String, String, Double, Double, String>> broadcastSet =
@@ -68,6 +70,18 @@ public class MIDTCapacityEmitter extends RichFlatMapFunction<String, Tuple7<Stri
             String outCountry = APToCountry.get(apOut);
             String inCountry = APToCountry.get(apIn);
             if(outCountry != null && inCountry != null) {
+                if(TrafficAnalysis.US_ONLY) {
+                    if(!inCountry.equals("US")) {
+                        apIn = TrafficAnalysis.NON_US_POINT;
+                        inCountry = TrafficAnalysis.NON_US_COUNTRY;
+                        inRegion = TrafficAnalysis.NON_US_REGION;
+                    }
+                    if(!outCountry.equals("US")) {
+                        apOut = TrafficAnalysis.NON_US_POINT;
+                        outCountry = TrafficAnalysis.NON_US_COUNTRY;
+                        outRegion = TrafficAnalysis.NON_US_REGION;
+                    }
+                }
                 isIntercontinental = !outRegion.equals(inRegion);
                 isInternational = !outCountry.equals(inCountry);
                 isInterstate = true;
