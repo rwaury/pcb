@@ -1,6 +1,8 @@
 package de.tuberlin.dima.old.join;
 
-import org.apache.flink.api.java.tuple.*;
+import org.apache.flink.api.java.tuple.Tuple11;
+import org.apache.flink.api.java.tuple.Tuple14;
+import org.apache.flink.api.java.tuple.Tuple8;
 
 public class ItineraryInfo {
 

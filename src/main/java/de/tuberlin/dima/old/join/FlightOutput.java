@@ -1,7 +1,5 @@
 package de.tuberlin.dima.old.join;
 
-import java.nio.charset.Charset;
-
 import org.apache.flink.api.common.io.BinaryInputFormat;
 import org.apache.flink.api.common.io.BinaryOutputFormat;
 import org.apache.flink.api.java.io.TextOutputFormat;
@@ -12,6 +10,7 @@ import org.apache.flink.core.memory.DataInputView;
 import org.apache.flink.core.memory.DataOutputView;
 
 import java.io.IOException;
+import java.nio.charset.Charset;
 import java.util.Date;
 
 public class FlightOutput {

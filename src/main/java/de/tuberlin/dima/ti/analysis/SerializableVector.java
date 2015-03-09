@@ -6,7 +6,6 @@ import org.apache.flink.core.memory.DataOutputView;
 import org.apache.flink.types.Value;
 
 import java.io.IOException;
-import java.lang.reflect.Array;
 
 public class SerializableVector implements Value {
 
