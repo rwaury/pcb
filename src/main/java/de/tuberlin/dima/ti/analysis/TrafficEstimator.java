@@ -31,6 +31,7 @@ public class TrafficEstimator implements CoGroupFunction<Itinerary, Tuple5<Strin
         int MIDTonlyPax = 0;
         ArrayList<Itinerary> itineraries = new ArrayList<Itinerary>();
         int minTime = Integer.MAX_VALUE;
+        int lowerBoundSum = 0;
         while (connIter.hasNext()) {
             Itinerary e = connIter.next().deepCopy();
             if(e.f18.equals("MIDT")) {
@@ -43,10 +44,12 @@ public class TrafficEstimator implements CoGroupFunction<Itinerary, Tuple5<Strin
                 if (e.f10 < minTime) {
                     minTime = e.f10;
                 }
+                lowerBoundSum += e.f13;
             }
             count++;
         }
         double estimateWithoutMIDT = estimate - (double) MIDTonlyPax;
+        estimateWithoutMIDT -= (double) lowerBoundSum;
         if(minTime < 1) {
             minTime = 1;
         }
@@ -56,8 +59,8 @@ public class TrafficEstimator implements CoGroupFunction<Itinerary, Tuple5<Strin
         }
         for(Itinerary e : itineraries) {
             double itineraryEstimate = LogitOptimizable.softmax(e, softmaxSum, weights, minTime)*estimateWithoutMIDT;
-            int roundedEstimate = (int)Math.round(itineraryEstimate);
-            roundedEstimate = Math.min(Math.max(roundedEstimate, e.f13), e.f14); // enforce lower and upper bound on itinerary level
+            int roundedEstimate = (int)Math.round(itineraryEstimate) + e.f13;
+            roundedEstimate = Math.min(roundedEstimate, e.f14); // enforce lower and upper bound on itinerary level
             if(roundedEstimate > 0) {
                 e.f15 = roundedEstimate;
                 e.f16 = itineraryEstimate;

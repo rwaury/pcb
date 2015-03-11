@@ -36,7 +36,7 @@ public class TrafficAnalysis {
 
     public static String INVERTED_COVARIANCE_MATRIX = "InvertedCovarianceMatrixBroadcastSet";
 
-    public static final int OD_FEATURE_COUNT = 5;
+    public static final int OD_FEATURE_COUNT = 6;
 
     public final static ArrayList<String> countriesWithStates = new ArrayList<String>() {{
         add("AR");
@@ -77,19 +77,16 @@ public class TrafficAnalysis {
         DataSet<Tuple8<String, String, String, String, String, Double, Double, String>> airportCoordinatesNR =
                 env.readTextFile(oriPath).flatMap(new AirportCoordinateExtractor());
 
-        airportCoordinatesNR.writeAsCsv(outputPath + "airportCoordinatesNR", "\n", ",", OVERWRITE).setParallelism(1);
-
         // get IATA region information for each airport
         DataSet<Tuple2<String, String>> regionInfoPartial = env.readTextFile(regionPath).map(new RegionExtractor());
         DataSet<Tuple2<String, String>> regionInfoXXX = env.fromElements(new Tuple2<String, String>(NON_US_COUNTRY, NON_US_REGION));
         DataSet<Tuple2<String, String>> regionInfo = regionInfoPartial.union(regionInfoXXX);
-
-        regionInfo.writeAsCsv(outputPath + "regionInfo", "\n", ",", OVERWRITE).setParallelism(1);
+        //regionInfo.writeAsCsv(outputPath + "regionInfo", "\n", ",", OVERWRITE).setParallelism(1);
 
         DataSet<Tuple8<String, String, String, String, String, Double, Double, String>> airportCountry =
                 airportCoordinatesNR.join(regionInfo).where(3).equalTo(0).with(new RegionJoiner());
 
-        airportCountry.writeAsCsv(outputPath + "airportCountry", "\n", ",", OVERWRITE).setParallelism(1);
+        //airportCountry.writeAsCsv(outputPath + "airportCountry", "\n", ",", OVERWRITE).setParallelism(1);
 
         DataSet<Flight> nonStopConnections = env.readFile(new FlightOutput.NonStopFullInputFormat(), outputPath + "oneFull")
                 .flatMap(new GeoInfoReplacer.GeoInfoReplacerUS1());
@@ -114,7 +111,7 @@ public class TrafficAnalysis {
 
         DataSet<String> midtStrings = env.readTextFile(midtPath);
         DataSet<MIDT> midt = midtStrings.flatMap(new MIDTParser()).withBroadcastSet(airportCountry, AP_GEO_DATA)
-                .map(new MIDTCompressor()).groupBy(0, 1, 2, 3, 4, 5, 6, 7).reduceGroup(new MIDTGrouper());
+                .map(new MIDTCompressor()).groupBy(0,1,2,3,4,5,6,7).reduceGroup(new MIDTGrouper());
         DataSet<Tuple5<String, String, String, Integer, Integer>> ODLowerBound = midt.map(new LowerBoundExtractor()).groupBy(0,1,2).sum(3).andSum(4);
 
         // group sort and first-1 is necessary to exclude multileg connections that yield the same OD (only the fastest is included)
@@ -183,8 +180,11 @@ public class TrafficAnalysis {
                 threeLegConnections.flatMap(new FlightDistanceExtractor.FlightDistanceExtractor3());
 
         DataSet<Tuple8<String, String, Boolean, Boolean, Boolean, String, Double, Integer>> flights = nonStop.union(twoLeg).union(threeLeg);
-        DataSet<Tuple7<String, String, String, Boolean, Boolean, Boolean, SerializableVector>> distances =
+        DataSet<Tuple7<String, String, String, Boolean, Boolean, Boolean, SerializableVector>> distancesWithoutMaxODTraffic =
                 flights.groupBy(0,1,2,3,4,5).reduceGroup(new ODDistanceAggregator());
+
+        DataSet<Tuple7<String, String, String, Boolean, Boolean, Boolean, SerializableVector>> distances =
+                distancesWithoutMaxODTraffic.join(ODBounds).where(0,1,2).equalTo(0,1,2).with(new MaxODCapacityJoiner());
 
         /* IPF START */
         IterativeDataSet<Tuple8<String, String, Boolean, Boolean, Boolean, Integer, Double, Boolean>> initial =
@@ -235,10 +235,18 @@ public class TrafficAnalysis {
     }
 
     // IPF operator
-    private static class KJoiner implements JoinFunction<Tuple7<String, String, String, Boolean, Boolean, Boolean, SerializableVector>, Tuple8<String, String, Boolean, Boolean, Boolean, Integer, Double, Boolean>, Tuple7<String, String, String, Boolean, Boolean, Boolean, Double>> {
+    private static class KJoiner implements JoinFunction<Tuple7<String, String, String, Boolean, Boolean, Boolean, SerializableVector>,
+            Tuple8<String, String, Boolean, Boolean, Boolean, Integer, Double, Boolean>,
+            Tuple7<String, String, String, Boolean, Boolean, Boolean, Double>> {
+
         @Override
-        public Tuple7<String, String, String, Boolean, Boolean, Boolean, Double> join(Tuple7<String, String, String, Boolean, Boolean, Boolean, SerializableVector> distance, Tuple8<String, String, Boolean, Boolean, Boolean, Integer, Double, Boolean> marginal) throws Exception {
-            double KFraction = marginal.f5*marginal.f6*TAUtil.decayingFunction(distance.f6.getVector().getEntry(0), distance.f6.getVector().getEntry(1), distance.f6.getVector().getEntry(2), distance.f6.getVector().getEntry(3), distance.f6.getVector().getEntry(4), distance.f3, distance.f4, distance.f5);
+        public Tuple7<String, String, String, Boolean, Boolean, Boolean, Double> join(
+                Tuple7<String, String, String, Boolean, Boolean, Boolean, SerializableVector> distance,
+                Tuple8<String, String, Boolean, Boolean, Boolean, Integer, Double, Boolean> marginal) throws Exception {
+            double KFraction = marginal.f5*marginal.f6*TAUtil.decayingFunction(
+                    distance.f6.getVector().getEntry(0), distance.f6.getVector().getEntry(1), distance.f6.getVector().getEntry(2),
+                    distance.f6.getVector().getEntry(3), distance.f6.getVector().getEntry(4), distance.f6.getVector().getEntry(5),
+                    distance.f3, distance.f4, distance.f5);
             if(Double.isNaN(KFraction) || KFraction < 0.0) {
                 KFraction = 0.0;
             }
@@ -247,9 +255,14 @@ public class TrafficAnalysis {
     }
 
     // IPF operator
-    private static class KUpdater implements JoinFunction<Tuple7<String, String, String, Boolean, Boolean, Boolean, Double>, Tuple8<String, String, Boolean, Boolean, Boolean, Integer, Double, Boolean>, Tuple8<String, String, Boolean, Boolean, Boolean, Integer, Double, Boolean>> {
+    private static class KUpdater implements JoinFunction<Tuple7<String, String, String, Boolean, Boolean, Boolean, Double>,
+            Tuple8<String, String, Boolean, Boolean, Boolean, Integer, Double, Boolean>,
+            Tuple8<String, String, Boolean, Boolean, Boolean, Integer, Double, Boolean>> {
+
         @Override
-        public Tuple8<String, String, Boolean, Boolean, Boolean, Integer, Double, Boolean> join(Tuple7<String, String, String, Boolean, Boolean, Boolean, Double> Ksum, Tuple8<String, String, Boolean, Boolean, Boolean, Integer, Double, Boolean> marginal) throws Exception {
+        public Tuple8<String, String, Boolean, Boolean, Boolean, Integer, Double, Boolean> join(
+                Tuple7<String, String, String, Boolean, Boolean, Boolean, Double> Ksum,
+                Tuple8<String, String, Boolean, Boolean, Boolean, Integer, Double, Boolean> marginal) throws Exception {
             double sum = Ksum.f6;
             //if(Double.isNaN(sum) || sum < 0.0) {
             //    sum = 1.0;
@@ -276,26 +289,41 @@ public class TrafficAnalysis {
     }
 
     // IPF result to estimate I
-    private static class TMJoinerOut implements JoinFunction<Tuple7<String, String, String, Boolean, Boolean, Boolean, SerializableVector>, Tuple8<String, String, Boolean, Boolean, Boolean, Integer, Double, Boolean>, Tuple8<String, String, String, Boolean, Boolean, Boolean, Double, SerializableVector>> {
+    private static class TMJoinerOut implements JoinFunction<Tuple7<String, String, String, Boolean, Boolean, Boolean, SerializableVector>,
+            Tuple8<String, String, Boolean, Boolean, Boolean, Integer, Double, Boolean>,
+            Tuple8<String, String, String, Boolean, Boolean, Boolean, Double, SerializableVector>> {
+
         @Override
-        public Tuple8<String, String, String, Boolean, Boolean, Boolean, Double, SerializableVector> join(Tuple7<String, String, String, Boolean, Boolean, Boolean, SerializableVector> distance, Tuple8<String, String, Boolean, Boolean, Boolean, Integer, Double, Boolean> marginal) throws Exception {
-            double partialDist = marginal.f5*marginal.f6*TAUtil.decayingFunction(distance.f6.getVector().getEntry(0), distance.f6.getVector().getEntry(1), distance.f6.getVector().getEntry(2), distance.f6.getVector().getEntry(3), distance.f6.getVector().getEntry(4), distance.f3, distance.f4, distance.f5);
+        public Tuple8<String, String, String, Boolean, Boolean, Boolean, Double, SerializableVector> join(
+                Tuple7<String, String, String, Boolean, Boolean, Boolean, SerializableVector> distance,
+                Tuple8<String, String, Boolean, Boolean, Boolean, Integer, Double, Boolean> marginal) throws Exception {
+            double partialDist = marginal.f5*marginal.f6*TAUtil.decayingFunction(
+                   distance.f6.getVector().getEntry(0), distance.f6.getVector().getEntry(1), distance.f6.getVector().getEntry(2),
+                   distance.f6.getVector().getEntry(3), distance.f6.getVector().getEntry(4), distance.f6.getVector().getEntry(5),
+                   distance.f3, distance.f4, distance.f5);
             if(Double.isNaN(partialDist) || partialDist < 0.0) {
                 partialDist = 0.0;
             }
-            return new Tuple8<String, String, String, Boolean, Boolean, Boolean, Double, SerializableVector>(distance.f0, distance.f1, distance.f2, distance.f3, distance.f4, distance.f5, partialDist, distance.f6);
+            return new Tuple8<String, String, String, Boolean, Boolean, Boolean, Double, SerializableVector>
+                    (distance.f0, distance.f1, distance.f2, distance.f3, distance.f4, distance.f5, partialDist, distance.f6);
         }
     }
 
     // IPF result to estimate II
-    private static class TMJoinerIn implements JoinFunction<Tuple8<String, String, String, Boolean, Boolean, Boolean, Double, SerializableVector>, Tuple8<String, String, Boolean, Boolean, Boolean, Integer, Double, Boolean>, Tuple8<String, String, String, Boolean, Boolean, Boolean, Double, SerializableVector>> {
+    private static class TMJoinerIn implements JoinFunction<Tuple8<String, String, String, Boolean, Boolean, Boolean, Double, SerializableVector>,
+            Tuple8<String, String, Boolean, Boolean, Boolean, Integer, Double, Boolean>,
+            Tuple8<String, String, String, Boolean, Boolean, Boolean, Double, SerializableVector>> {
+
         @Override
-        public Tuple8<String, String, String, Boolean, Boolean, Boolean, Double, SerializableVector> join(Tuple8<String, String, String, Boolean, Boolean, Boolean, Double, SerializableVector> tmOut, Tuple8<String, String, Boolean, Boolean, Boolean, Integer, Double, Boolean> marginal) throws Exception {
+        public Tuple8<String, String, String, Boolean, Boolean, Boolean, Double, SerializableVector> join(
+                Tuple8<String, String, String, Boolean, Boolean, Boolean, Double, SerializableVector> tmOut,
+                Tuple8<String, String, Boolean, Boolean, Boolean, Integer, Double, Boolean> marginal) throws Exception {
             double fullDistance = tmOut.f6*marginal.f5*marginal.f6;
             if(Double.isNaN(fullDistance) || fullDistance < 0.0) {
                 fullDistance = 0.0;
             }
-            return new Tuple8<String, String, String, Boolean, Boolean, Boolean, Double, SerializableVector>(tmOut.f0, tmOut.f1, tmOut.f2, tmOut.f3, tmOut.f4, tmOut.f5, fullDistance, tmOut.f7);
+            return new Tuple8<String, String, String, Boolean, Boolean, Boolean, Double, SerializableVector>
+                    (tmOut.f0, tmOut.f1, tmOut.f2, tmOut.f3, tmOut.f4, tmOut.f5, fullDistance, tmOut.f7);
         }
     }
 
@@ -307,13 +335,32 @@ public class TrafficAnalysis {
         }
     }
 
+    // add maximum OD capacity (from CB result) to OD feature vector
+    private static class MaxODCapacityJoiner implements JoinFunction<
+            Tuple7<String, String, String, Boolean, Boolean, Boolean, SerializableVector>,
+            Tuple5<String, String, String, Integer, Integer>,
+            Tuple7<String, String, String, Boolean, Boolean, Boolean, SerializableVector>> {
+
+        @Override
+        public Tuple7<String, String, String, Boolean, Boolean, Boolean, SerializableVector> join(
+                Tuple7<String, String, String, Boolean, Boolean, Boolean, SerializableVector> distance,
+                Tuple5<String, String, String, Integer, Integer> odBound) throws Exception {
+            distance.f6.getVector().setEntry(5, (double)Math.max(odBound.f3, odBound.f4));
+            return distance;
+        }
+    }
+
     // merge TM estimates and training results
-    private static class WeightTMJoiner implements JoinFunction<Tuple5<String, String, String, Double, SerializableVector>, Tuple4<String, String, String, LogitOptimizable>,
+    private static class WeightTMJoiner implements JoinFunction<Tuple5<String, String, String, Double, SerializableVector>,
+            Tuple4<String, String, String, LogitOptimizable>,
             Tuple6<String, String, String, Double, SerializableVector, LogitOptimizable>> {
 
         @Override
-        public Tuple6<String, String, String, Double, SerializableVector, LogitOptimizable> join(Tuple5<String, String, String, Double, SerializableVector> tmEntry, Tuple4<String, String, String, LogitOptimizable> logit) throws Exception {
-            return new Tuple6<String, String, String, Double, SerializableVector, LogitOptimizable>(tmEntry.f0, tmEntry.f1, tmEntry.f2, tmEntry.f3, tmEntry.f4, logit.f3);
+        public Tuple6<String, String, String, Double, SerializableVector, LogitOptimizable> join(
+                Tuple5<String, String, String, Double, SerializableVector> tmEntry,
+                Tuple4<String, String, String, LogitOptimizable> logit) throws Exception {
+            return new Tuple6<String, String, String, Double, SerializableVector, LogitOptimizable>
+                    (tmEntry.f0, tmEntry.f1, tmEntry.f2, tmEntry.f3, tmEntry.f4, logit.f3);
         }
     }
 

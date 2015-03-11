@@ -44,6 +44,7 @@ public class ODDistanceAggregator implements GroupReduceFunction<Tuple8<String, 
         vector.getVector().setEntry(2, (double) max);
         vector.getVector().setEntry(3, avg);
         vector.getVector().setEntry(4, (double) count);
+        vector.getVector().setEntry(5, 0.0); // maxODTraffic
         result.f6 = vector;
         out.collect(result);
     }
