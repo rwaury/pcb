@@ -6,7 +6,10 @@ import org.apache.commons.math3.linear.RealVector;
 
 public class TAUtil {
 
-    public static double decayingFunction(double minTravelTime, double maxTravelTime, double avgTravelTime, double distance, double count, double maxODTraffic, boolean isIntercontinental, boolean isInternational, boolean isInterstate) {
+    public static double decayingFunction(double minTravelTime, double maxTravelTime, double avgTravelTime,
+                                          double distance, double count, double maxODTraffic,
+                                          boolean isIntercontinental, boolean isInternational, boolean isInterstate,
+                                          double p, boolean useTime) {
         /*double lnMode = 0.0;
         if(isIntercontinental) {
             lnMode = Math.log(5545.0); // JFK-LHR
@@ -25,7 +28,13 @@ public class TAUtil {
         double denominator = x*sigma*Math.sqrt(2.0*Math.PI);
         return numerator/denominator;*/
         //return 1.0/Math.sqrt(minTravelTime*avgTravelTime*distance);
-        return ((maxODTraffic*maxODTraffic)/count)/(minTravelTime*avgTravelTime*distance);
+        //return ((maxODTraffic*maxODTraffic)/count)/(minTravelTime*avgTravelTime*distance);
+        if(useTime) {
+            return 1.0/Math.pow(minTravelTime, p);
+        }else {
+            return 1.0/Math.pow(distance, p);
+        }
+
     }
 
     public static double mahalanobisDistance(ArrayRealVector x, ArrayRealVector y, Array2DRowRealMatrix Sinv) {

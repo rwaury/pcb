@@ -5,10 +5,21 @@ import org.apache.flink.api.common.functions.FlatMapFunction;
 import org.apache.flink.api.java.tuple.Tuple7;
 import org.apache.flink.util.Collector;
 
+import java.util.Collection;
 import java.util.Date;
 
 // parses one-leg flights produced by the CB and emits maximum capacities
 public class APCapacityExtractor implements FlatMapFunction<Flight, Tuple7<String, String, Boolean, Boolean, Boolean, Integer, Integer>> {
+
+    private boolean noPartition;
+    private boolean DIPartition;
+    private boolean fullPartition;
+
+    public APCapacityExtractor(boolean noPartition, boolean DIPartition, boolean fullPartition) {
+        this.noPartition = noPartition;
+        this.DIPartition = DIPartition;
+        this.fullPartition = fullPartition;
+    }
 
     @Override
     public void flatMap(Flight flight, Collector<Tuple7<String, String, Boolean, Boolean, Boolean, Integer, Integer>> out) throws Exception {
@@ -26,6 +37,16 @@ public class APCapacityExtractor implements FlatMapFunction<Flight, Tuple7<Strin
         boolean isInterState = true;
         if (!isInternational && TrafficAnalysis.countriesWithStates.contains(flight.getOriginCountry())) {
             isInterState = !flight.getOriginState().equals(flight.getDestinationState());
+        }
+        if(noPartition) {
+            isInterRegional = false;
+            isInternational = false;
+            isInterState = false;
+        }
+        if(DIPartition) {
+            isInterRegional = false;
+            isInternational = isInternational;
+            isInterState = false;
         }
         int capacity = flight.getMaxCapacity();
         Tuple7<String, String, Boolean, Boolean, Boolean, Integer, Integer> outgoing = new Tuple7<String, String, Boolean, Boolean, Boolean, Integer, Integer>

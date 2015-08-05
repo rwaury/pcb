@@ -25,27 +25,29 @@ public class ParallelConnectionBuilder {
 
     //public static final Logger LOG = LoggerFactory.getLogger(ParallelConnectionBuilder.class);
 
+    private static final String PROTOCOL = "hdfs:///";
+
     /** HDFS default paths **/
     private static String schedulePathKey = "SCHEDULE_PATH_PROPERTY_KEY";
-    private static String schedulePathDefault = "hdfs:///user/rwaury/input2/all_catalog_140417.txt";
+    private static String schedulePathDefault = PROTOCOL + "user/rwaury/input2/all_catalog_140417.txt";
 
     private static String oriPathKey = "ORI_PATH_PROPERTY_KEY";
-    private static String oriPathDefault = "hdfs:///user/rwaury/input2/ori_por_public.csv";
+    private static String oriPathDefault = PROTOCOL + "user/rwaury/input2/ori_por_public.csv";
 
     private static String regionPathKey = "REGION_PATH_PROPERTY_KEY";
-    private static String regionPathDefault = "hdfs:///user/rwaury/input2/ori_country_region_info.csv";
+    private static String regionPathDefault = PROTOCOL + "user/rwaury/input2/ori_country_region_info.csv";
 
     private static String defaultCapacityPathKey = "DEFAULT_CAP_PATH_PROPERTY_KEY";
-    private static String defaultCapacityPathDefault = "hdfs:///user/rwaury/input2/default_capacities.csv";
+    private static String defaultCapacityPathDefault = PROTOCOL + "user/rwaury/input2/default_capacities.csv";
 
     private static String capacityPathKey = "CAPACITY_PATH_PROPERTY_KEY";
-    private static String capacityPathDefault = "hdfs:///user/rwaury/input2/capacities_2014-07-01.csv";
+    private static String capacityPathDefault = PROTOCOL + "user/rwaury/input2/capacities_2014-07-01.csv";
 
     private static String mctPathKey = "MCT_PATH_PROPERTY_KEY";
-    private static String mctPathDefault = "hdfs:///user/rwaury/input2/mct.csv";
+    private static String mctPathDefault = PROTOCOL + "user/rwaury/input2/mct.csv";
 
     private static String outputPathKey = "OUTPUT_PATH_PROPERTY_KEY";
-    private static String outputPathDefault = "hdfs:///user/rwaury/output3/flights/";
+    private static String outputPathDefault = PROTOCOL + "user/rwaury/output3/flights/";
 
     /** date range as 64 bit timestamps **/
     public static final long START = 1399248000000L;
@@ -78,7 +80,7 @@ public class ParallelConnectionBuilder {
 
         Properties defaults = setupPropertyDefaults();
         Properties properties = new Properties(defaults);
-        boolean fullCB = true;
+        boolean fullCB = false;
 
         executeCBPhase0(properties);
         if(fullCB) {
@@ -129,7 +131,7 @@ public class ParallelConnectionBuilder {
         DataSet<Tuple3<String, String, Integer>> aircraftCapacities = env.readCsvFile(capacityPath).fieldDelimiter('^').ignoreFirstLine()
                 .includeFields(false, true, true, true, false, false, false, false).types(String.class, String.class, Integer.class);
 
-        DataSet<Flight> join4 = join3.coGroup(aircraftCapacities).where("f6","f4").equalTo(0,1).with(new CapacityGrouper());
+        DataSet<Flight> join4 = join3.coGroup(aircraftCapacities).where("f6","f4").equalTo(0, 1).with(new CapacityGrouper());
 
         // create multi-leg flights as non-stop flights
         DataSet<Flight> multiLeg2a = join4.join(join4, JOIN_HINT).where("f2.f0", "f4", "f5", "f13")
@@ -181,8 +183,8 @@ public class ParallelConnectionBuilder {
 
         FileOutputFormat nonStopFull = new FlightOutput.NonStopFullOutputFormat();
         singleFltNoFlights.write(nonStopFull, outputPath + "oneFull", WRITE_MODE);
-
-        env.execute("Phase 0");
+        System.out.println(env.getExecutionPlan());
+        //env.execute("Phase 0");
     }
 
     /**
@@ -226,7 +228,8 @@ public class ParallelConnectionBuilder {
         FileOutputFormat threeLegFull = new FlightOutput.ThreeLegFullOutputFormat();
         threeLegConnections.write(threeLegFull, outputPath + "threeFull", WRITE_MODE);
 
-        env.execute("Phase 1");
+        System.out.println(env.getExecutionPlan());
+        //env.execute("Phase 1");
     }
 
     /** setup helper functions **/

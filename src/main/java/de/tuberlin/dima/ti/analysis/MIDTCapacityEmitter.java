@@ -1,6 +1,7 @@
 package de.tuberlin.dima.ti.analysis;
 
 import org.apache.flink.api.common.functions.RichFlatMapFunction;
+import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.flink.api.java.tuple.Tuple7;
 import org.apache.flink.api.java.tuple.Tuple8;
 import org.apache.flink.configuration.Configuration;
@@ -16,7 +17,15 @@ public class MIDTCapacityEmitter extends RichFlatMapFunction<String, Tuple7<Stri
     private HashMap<String, String> APToCountry;
     private HashMap<String, String> APToState;
 
+    private boolean noPartition;
+    private boolean DIPartition;
+    private boolean fullPartition;
 
+    public MIDTCapacityEmitter(boolean noPartition, boolean DIPartition, boolean fullPartition) {
+        this.noPartition = noPartition;
+        this.DIPartition = DIPartition;
+        this.fullPartition = fullPartition;
+    }
 
     @Override
     public void open(Configuration parameters) {
@@ -68,18 +77,6 @@ public class MIDTCapacityEmitter extends RichFlatMapFunction<String, Tuple7<Stri
             String outCountry = APToCountry.get(apOut);
             String inCountry = APToCountry.get(apIn);
             if(outCountry != null && inCountry != null) {
-                if(TrafficAnalysis.US_ONLY) {
-                    if(!inCountry.equals("US")) {
-                        apIn = TrafficAnalysis.NON_US_POINT;
-                        inCountry = TrafficAnalysis.NON_US_COUNTRY;
-                        inRegion = TrafficAnalysis.NON_US_REGION;
-                    }
-                    if(!outCountry.equals("US")) {
-                        apOut = TrafficAnalysis.NON_US_POINT;
-                        outCountry = TrafficAnalysis.NON_US_COUNTRY;
-                        outRegion = TrafficAnalysis.NON_US_REGION;
-                    }
-                }
                 isIntercontinental = !outRegion.equals(inRegion);
                 isInternational = !outCountry.equals(inCountry);
                 isInterstate = true;
@@ -90,6 +87,16 @@ public class MIDTCapacityEmitter extends RichFlatMapFunction<String, Tuple7<Stri
                 }
             } else {
                 continue;
+            }
+            if(noPartition) {
+                isIntercontinental = false;
+                isInternational = false;
+                isInterstate = false;
+            }
+            if(DIPartition) {
+                isIntercontinental = false;
+                isInternational = isInternational;
+                isInterstate = false;
             }
             Tuple7<String, String, Boolean, Boolean, Boolean, Integer, Integer> tOut =
                     new Tuple7<String, String, Boolean, Boolean, Boolean, Integer, Integer>(apOut, dayString, isIntercontinental, isInternational, isInterstate, pax, 0);
