@@ -1,6 +1,5 @@
 package de.tuberlin.dima.ti.analysis;
 
-import com.sun.org.apache.xpath.internal.operations.Bool;
 import de.tuberlin.dima.ti.pcb.*;
 import org.apache.flink.api.common.functions.FilterFunction;
 import org.apache.flink.api.common.functions.JoinFunction;
@@ -15,7 +14,6 @@ import org.apache.flink.core.fs.FileSystem;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Date;
 
 public class TrafficAnalysis {
 

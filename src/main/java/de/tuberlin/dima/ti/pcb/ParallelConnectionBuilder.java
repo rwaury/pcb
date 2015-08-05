@@ -80,7 +80,7 @@ public class ParallelConnectionBuilder {
 
         Properties defaults = setupPropertyDefaults();
         Properties properties = new Properties(defaults);
-        boolean fullCB = false;
+        boolean fullCB = true;
 
         executeCBPhase0(properties);
         if(fullCB) {
@@ -183,8 +183,8 @@ public class ParallelConnectionBuilder {
 
         FileOutputFormat nonStopFull = new FlightOutput.NonStopFullOutputFormat();
         singleFltNoFlights.write(nonStopFull, outputPath + "oneFull", WRITE_MODE);
-        System.out.println(env.getExecutionPlan());
-        //env.execute("Phase 0");
+        //System.out.println(env.getExecutionPlan());
+        env.execute("Phase 0");
     }
 
     /**
@@ -228,8 +228,8 @@ public class ParallelConnectionBuilder {
         FileOutputFormat threeLegFull = new FlightOutput.ThreeLegFullOutputFormat();
         threeLegConnections.write(threeLegFull, outputPath + "threeFull", WRITE_MODE);
 
-        System.out.println(env.getExecutionPlan());
-        //env.execute("Phase 1");
+        //System.out.println(env.getExecutionPlan());
+        env.execute("Phase 1");
     }
 
     /** setup helper functions **/

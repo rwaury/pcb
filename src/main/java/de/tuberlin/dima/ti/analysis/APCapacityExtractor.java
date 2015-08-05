@@ -5,7 +5,6 @@ import org.apache.flink.api.common.functions.FlatMapFunction;
 import org.apache.flink.api.java.tuple.Tuple7;
 import org.apache.flink.util.Collector;
 
-import java.util.Collection;
 import java.util.Date;
 
 // parses one-leg flights produced by the CB and emits maximum capacities
