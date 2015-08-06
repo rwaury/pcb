@@ -12,9 +12,9 @@ import org.apache.flink.util.Collector;
 // and also drops all flights that are not at least partially in the US
 public class GeoInfoReplacer {
 
-    public static GeoInfo XXX = new GeoInfo(TrafficAnalysis.NON_US_POINT, "", TrafficAnalysis.NON_US_CITY,
-            TrafficAnalysis.NON_US_STATE, TrafficAnalysis.NON_US_COUNTRY, TrafficAnalysis.NON_US_REGION,
-            TrafficAnalysis.NON_US_LATITUDE, TrafficAnalysis.NON_US_LONGITUDE, TrafficAnalysis.NON_US_ICAO);
+    public static GeoInfo XXX;// = new GeoInfo(TrafficAnalysis.NON_US_POINT, "", TrafficAnalysis.NON_US_CITY,
+            //TrafficAnalysis.NON_US_STATE, TrafficAnalysis.NON_US_COUNTRY, TrafficAnalysis.NON_US_REGION,
+            //TrafficAnalysis.NON_US_LATITUDE, TrafficAnalysis.NON_US_LONGITUDE, TrafficAnalysis.NON_US_ICAO);
 
     public static class GeoInfoReplacerUS1 implements FlatMapFunction<Flight, Flight> {
 

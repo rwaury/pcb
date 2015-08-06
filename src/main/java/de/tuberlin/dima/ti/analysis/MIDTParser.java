@@ -151,19 +151,6 @@ public class MIDTParser extends RichFlatMapFunction<String, MIDT> {
         Date date = new Date(departureTimestamp);
         String dayString = TrafficAnalysis.dayFormat.format(date);
         double geoDetour = Math.max(1.0, travelledDistance/directDistance);
-        if(TrafficAnalysis.US_ONLY) {
-            o = airports.get(origin);
-            d = airports.get(destination);
-            if(!o.country.equals("US")) {
-                origin = TrafficAnalysis.NON_US_POINT;
-            }
-            if(!d.country.equals("US")) {
-                destination = TrafficAnalysis.NON_US_POINT;
-            }
-            if(origin.equals(destination)) {
-                return;
-            }
-        }
         MIDT result = new MIDT(origin, destination, dayString,
                 flight1, flight2, flight3, flight4, flight5, travelTime, waitingTime,
                 segmentCount, pax, geoDetour, Math.max(1, countries.size()));

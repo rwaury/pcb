@@ -29,25 +29,25 @@ public class ParallelConnectionBuilder {
 
     /** HDFS default paths **/
     private static String schedulePathKey = "SCHEDULE_PATH_PROPERTY_KEY";
-    private static String schedulePathDefault = PROTOCOL + "user/rwaury/input2/all_catalog_140417.txt";
+    private static String schedulePathDefault = PROTOCOL + "tmp/waury/input/all_catalog_140417.txt";
 
     private static String oriPathKey = "ORI_PATH_PROPERTY_KEY";
-    private static String oriPathDefault = PROTOCOL + "user/rwaury/input2/ori_por_public.csv";
+    private static String oriPathDefault = PROTOCOL + "tmp/waury/input/optd_por_public.csv";
 
     private static String regionPathKey = "REGION_PATH_PROPERTY_KEY";
-    private static String regionPathDefault = PROTOCOL + "user/rwaury/input2/ori_country_region_info.csv";
+    private static String regionPathDefault = PROTOCOL + "tmp/waury/input/ori_country_region_info.csv";
 
     private static String defaultCapacityPathKey = "DEFAULT_CAP_PATH_PROPERTY_KEY";
-    private static String defaultCapacityPathDefault = PROTOCOL + "user/rwaury/input2/default_capacities.csv";
+    private static String defaultCapacityPathDefault = PROTOCOL + "tmp/waury/input/default_capacities.csv";
 
     private static String capacityPathKey = "CAPACITY_PATH_PROPERTY_KEY";
-    private static String capacityPathDefault = PROTOCOL + "user/rwaury/input2/capacities_2014-07-01.csv";
+    private static String capacityPathDefault = PROTOCOL + "tmp/waury/input/capacities_2014-07-01.csv";
 
     private static String mctPathKey = "MCT_PATH_PROPERTY_KEY";
-    private static String mctPathDefault = PROTOCOL + "user/rwaury/input2/mct.csv";
+    private static String mctPathDefault = PROTOCOL + "tmp/waury/input/mct.csv";
 
     private static String outputPathKey = "OUTPUT_PATH_PROPERTY_KEY";
-    private static String outputPathDefault = PROTOCOL + "user/rwaury/output3/flights/";
+    private static String outputPathDefault = PROTOCOL + "tmp/waury/output/";
 
     /** date range as 64 bit timestamps **/
     public static final long START = 1399248000000L;

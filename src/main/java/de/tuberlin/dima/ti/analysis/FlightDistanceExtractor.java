@@ -14,6 +14,16 @@ public class FlightDistanceExtractor {
 
     public static class FlightDistanceExtractor1 implements FlatMapFunction<Flight, Tuple8<String, String, Boolean, Boolean, Boolean, String, Double, Integer>> {
 
+        private boolean noPartition;
+        private boolean DIPartition;
+        private boolean fullPartition;
+
+        public FlightDistanceExtractor1(boolean noPartition, boolean DIPartition, boolean fullPartition) {
+            this.noPartition = noPartition;
+            this.DIPartition = DIPartition;
+            this.fullPartition = fullPartition;
+        }
+
         @Override
         public void flatMap(Flight value, Collector<Tuple8<String, String, Boolean, Boolean, Boolean, String, Double, Integer>> out) throws Exception {
             if(value.getDepartureTimestamp() > TrafficAnalysis.lastPossibleTimestamp ||
@@ -32,6 +42,16 @@ public class FlightDistanceExtractor {
             if(!isInternational && TrafficAnalysis.countriesWithStates.contains(value.getOriginCountry())) {
                 isInterstate = !value.getOriginState().equals(value.getDestinationState());
             }
+            if(noPartition) {
+                isIntercontinental = false;
+                isInternational = false;
+                isInterstate = false;
+            }
+            if(DIPartition) {
+                isIntercontinental = false;
+                isInternational = isInternational;
+                isInterstate = false;
+            }
             out.collect(new Tuple8<String, String, Boolean, Boolean, Boolean, String, Double, Integer>
                     (value.getOriginAirport(), value.getDestinationAirport(), isIntercontinental, isInternational, isInterstate, dayString,
                      CBUtil.dist(value.getOriginLatitude(), value.getOriginLongitude(), value.getDestinationLatitude(), value.getDestinationLongitude()), minutes));
@@ -39,6 +59,16 @@ public class FlightDistanceExtractor {
     }
 
     public static class FlightDistanceExtractor2 implements FlatMapFunction<Tuple2<Flight, Flight>, Tuple8<String, String, Boolean, Boolean, Boolean, String, Double, Integer>> {
+
+        private boolean noPartition;
+        private boolean DIPartition;
+        private boolean fullPartition;
+
+        public FlightDistanceExtractor2(boolean noPartition, boolean DIPartition, boolean fullPartition) {
+            this.noPartition = noPartition;
+            this.DIPartition = DIPartition;
+            this.fullPartition = fullPartition;
+        }
 
         @Override
         public void flatMap(Tuple2<Flight, Flight> value, Collector<Tuple8<String, String, Boolean, Boolean, Boolean, String, Double, Integer>> out) throws Exception {
@@ -61,6 +91,16 @@ public class FlightDistanceExtractor {
             if(!isInternational && TrafficAnalysis.countriesWithStates.contains(value.f0.getOriginCountry())) {
                 isInterstate = !value.f0.getOriginState().equals(value.f1.getDestinationState());
             }
+            if(noPartition) {
+                isIntercontinental = false;
+                isInternational = false;
+                isInterstate = false;
+            }
+            if(DIPartition) {
+                isIntercontinental = false;
+                isInternational = isInternational;
+                isInterstate = false;
+            }
             out.collect(new Tuple8<String, String, Boolean, Boolean, Boolean, String, Double, Integer>
                     (value.f0.getOriginAirport(), value.f1.getDestinationAirport(), isIntercontinental, isInternational, isInterstate, dayString,
                             CBUtil.dist(value.f0.getOriginLatitude(), value.f0.getOriginLongitude(), value.f1.getDestinationLatitude(), value.f1.getDestinationLongitude()), minutes));
@@ -68,6 +108,17 @@ public class FlightDistanceExtractor {
     }
 
     public static class FlightDistanceExtractor3 implements FlatMapFunction<Tuple3<Flight, Flight, Flight>, Tuple8<String, String, Boolean, Boolean, Boolean, String, Double, Integer>> {
+
+        private boolean noPartition;
+        private boolean DIPartition;
+        private boolean fullPartition;
+
+        public FlightDistanceExtractor3(boolean noPartition, boolean DIPartition, boolean fullPartition) {
+            this.noPartition = noPartition;
+            this.DIPartition = DIPartition;
+            this.fullPartition = fullPartition;
+        }
+
         @Override
         public void flatMap(Tuple3<Flight, Flight, Flight> value, Collector<Tuple8<String, String, Boolean, Boolean, Boolean, String, Double, Integer>> out) throws Exception {
             if(value.f0.getDepartureTimestamp() > TrafficAnalysis.lastPossibleTimestamp ||
@@ -90,6 +141,16 @@ public class FlightDistanceExtractor {
             boolean isInterstate = true;
             if(!isInternational && TrafficAnalysis.countriesWithStates.contains(value.f0.getOriginCountry())) {
                 isInterstate = !value.f0.getOriginState().equals(value.f2.getDestinationState());
+            }
+            if(noPartition) {
+                isIntercontinental = false;
+                isInternational = false;
+                isInterstate = false;
+            }
+            if(DIPartition) {
+                isIntercontinental = false;
+                isInternational = isInternational;
+                isInterstate = false;
             }
             out.collect(new Tuple8<String, String, Boolean, Boolean, Boolean, String, Double, Integer>
                     (value.f0.getOriginAirport(), value.f2.getDestinationAirport(), isIntercontinental, isInternational, isInterstate, dayString,

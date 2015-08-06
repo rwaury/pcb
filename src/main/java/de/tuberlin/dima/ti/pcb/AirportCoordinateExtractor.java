@@ -31,10 +31,10 @@ public class AirportCoordinateExtractor implements FlatMapFunction<String, Tuple
     public void flatMap(String value, Collector<Tuple8<String, String, String, String, String, Double, Double, String>> out) throws Exception {
         if (value.startsWith(HEADER)) {
             // this is a very ugly hack needed for the TrafficAnalysis of US only traffic
-            out.collect(
+            /*out.collect(
                     new Tuple8<String, String, String, String, String, Double, Double, String>(TrafficAnalysis.NON_US_POINT, TrafficAnalysis.NON_US_CITY,
                             TrafficAnalysis.NON_US_STATE, TrafficAnalysis.NON_US_COUNTRY, TrafficAnalysis.NON_US_REGION,
-                            TrafficAnalysis.NON_US_LATITUDE, TrafficAnalysis.NON_US_LONGITUDE, TrafficAnalysis.NON_US_ICAO));
+                            TrafficAnalysis.NON_US_LATITUDE, TrafficAnalysis.NON_US_LONGITUDE, TrafficAnalysis.NON_US_ICAO));*/
             return;
         }
         tmp = value.split(DELIM);

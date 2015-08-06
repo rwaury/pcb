@@ -14,6 +14,7 @@ import org.apache.flink.core.fs.FileSystem;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Date;
 
 public class TrafficAnalysis {
 
@@ -49,6 +50,7 @@ public class TrafficAnalysis {
         add("US");
     }};
 
+    /*
     public static final boolean US_ONLY = false;
     // black/white hole for non-domestic US traffic
     public final static String NON_US_POINT = "XXX";
@@ -61,44 +63,47 @@ public class TrafficAnalysis {
     // exact opposite of the mean center of the US population
     public final static double NON_US_LATITUDE = -37.458905;
     public final static double NON_US_LONGITUDE = 87.69223399999998;
-
+    */
 
     public final static SimpleDateFormat dayFormat = new SimpleDateFormat("ddMMyyyy");
 
     private static String PROTOCOL = "hdfs:///";
 
-    private static String oriPath = PROTOCOL + "user/rwaury/input2/ori_por_public.csv";
-    private static String regionPath = PROTOCOL + "user/rwaury/input2/ori_country_region_info.csv";
-    private static String midtPath = PROTOCOL + "user/rwaury/input2/MIDTTotalHits.csv";
-    private static String outputPath = PROTOCOL + "user/rwaury/output3/flights/";
+    private static String oriPath = PROTOCOL + "tmp/waury/input/optd_por_public.csv";
+    private static String regionPath = PROTOCOL + "tmp/waury/input/ori_country_region_info.csv";
+    private static String midtPath = PROTOCOL + "tmp/waury/input/MIDTTotalHits.csv";
+    private static String cbOutputPath = PROTOCOL + "tmp/waury/output/";
+    private static String outputPath = PROTOCOL + "tmp/waury/output/tm/";
 
     private static final JoinOperatorBase.JoinHint JOIN_HINT = JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE;
     private static final FileSystem.WriteMode OVERWRITE = FileSystem.WriteMode.OVERWRITE;
 
     public static void main(String[] args) throws Exception {
         ti(true,    p1,     true, false, false);
-        ti(true,    p15,    true, false, false);
+        /*ti(true,    p15,    true, false, false);
         ti(true,    p2,     true, false, false);
         ti(false,   p1,     true, false, false);
         ti(false,   p15,    true, false, false);
-        ti(false,   p2,     true, false, false);
+        ti(false,   p2,     true, false, false);*/
 
         ti(true,    p1,     false, true, false);
-        ti(true,    p15,    false, true, false);
+        /*ti(true,    p15,    false, true, false);
         ti(true,    p2,     false, true, false);
         ti(false,   p1,     false, true, false);
         ti(false,   p15,    false, true, false);
         ti(false,   p2,     false, true, false);
-
+        */
         ti(true,    p1,     false, false, true);
-        ti(true,    p15,    false, false, true);
+        /*ti(true,    p15,    false, false, true);
         ti(true,    p2,     false, false, true);
         ti(false,   p1,     false, false, true);
         ti(false,   p15,    false, false, true);
-        ti(false,   p2,     false, false, true);
+        ti(false,   p2,     false, false, true);*/
     }
 
     public static void ti(boolean useTime, double p, boolean noPartition, boolean DIPartition, boolean fullPartition) throws Exception {
+        String timestamp = Long.toString(System.currentTimeMillis());
+
         ExecutionEnvironment env = ExecutionEnvironment.getExecutionEnvironment();
 
         // extract coordinates of all known airports
@@ -106,21 +111,21 @@ public class TrafficAnalysis {
                 env.readTextFile(oriPath).flatMap(new AirportCoordinateExtractor());
 
         // get IATA region information for each airport
-        DataSet<Tuple2<String, String>> regionInfoPartial = env.readTextFile(regionPath).map(new RegionExtractor());
+        DataSet<Tuple2<String, String>> regionInfo = env.readTextFile(regionPath).map(new RegionExtractor());
         //DataSet<Tuple2<String, String>> regionInfoXXX = env.fromElements(new Tuple2<String, String>(NON_US_COUNTRY, NON_US_REGION));
-        DataSet<Tuple2<String, String>> regionInfo = regionInfoPartial;//.union(regionInfoXXX);
-        //regionInfo.writeAsCsv(outputPath + "regionInfo", "\n", ",", OVERWRITE).setParallelism(1);
+        //DataSet<Tuple2<String, String>> regionInfo = regionInfoPartial;//.union(regionInfoXXX);
+        //regionInfo.writeAsCsv(outputPath + timestamp + "regionInfo", "\n", ",", OVERWRITE).setParallelism(1);
 
         DataSet<Tuple8<String, String, String, String, String, Double, Double, String>> airportCountry =
                 airportCoordinatesNR.join(regionInfo).where(3).equalTo(0).with(new RegionJoiner());
 
-        //airportCountry.writeAsCsv(outputPath + "airportCountry", "\n", ",", OVERWRITE).setParallelism(1);
+        //airportCountry.writeAsCsv(outputPath + timestamp + "airportCountry", "\n", ",", OVERWRITE).setParallelism(1);
 
-        DataSet<Flight> nonStopConnections = env.readFile(new FlightOutput.NonStopFullInputFormat(), outputPath + "oneFull");
+        DataSet<Flight> nonStopConnections = env.readFile(new FlightOutput.NonStopFullInputFormat(), cbOutputPath + "oneFull");
 //                .flatMap(new GeoInfoReplacer.GeoInfoReplacerUS1());
-        DataSet<Tuple2<Flight, Flight>> twoLegConnections = env.readFile(new FlightOutput.TwoLegFullInputFormat(), outputPath + "twoFull");
+        DataSet<Tuple2<Flight, Flight>> twoLegConnections = env.readFile(new FlightOutput.TwoLegFullInputFormat(), cbOutputPath + "twoFull");
 //                .flatMap(new GeoInfoReplacer.GeoInfoReplacerUS2());
-        DataSet<Tuple3<Flight, Flight, Flight>> threeLegConnections = env.readFile(new FlightOutput.ThreeLegFullInputFormat(), outputPath + "threeFull");
+        DataSet<Tuple3<Flight, Flight, Flight>> threeLegConnections = env.readFile(new FlightOutput.ThreeLegFullInputFormat(), cbOutputPath + "threeFull");
 //                .flatMap(new GeoInfoReplacer.GeoInfoReplacerUS3());
 
         DataSet<Itinerary> nonStopItineraries = nonStopConnections.flatMap(new FlightExtractor.FlightExtractor1());
@@ -128,14 +133,14 @@ public class TrafficAnalysis {
         DataSet<Itinerary> threeLegItineraries = threeLegConnections.flatMap(new FlightExtractor.FlightExtractor3());
         DataSet<Itinerary> itineraries = nonStopItineraries.union(twoLegItineraries).union(threeLegItineraries);
 
-        /*DataSet<Tuple3<String, String, Integer>> flightBounds = nonStopConnections.map(new MapFunction<Flight, Tuple3<String, String, Integer>>() {
+        DataSet<Tuple3<String, String, Integer>> flightBounds = nonStopConnections.map(new MapFunction<Flight, Tuple3<String, String, Integer>>() {
             @Override
             public Tuple3<String, String, Integer> map(Flight flight) throws Exception {
                 Date d = new Date(flight.getDepartureTimestamp());
                 return new Tuple3<String, String, Integer>(flight.getAirline() + flight.getFlightNumber(), dayFormat.format(d), flight.getMaxCapacity());
             }
         }).groupBy(0,1).min(2);
-        flightBounds.writeAsCsv(outputPath + "flightCapacity", "\n", ",", OVERWRITE).setParallelism(1);*/
+        //flightBounds.writeAsCsv(outputPath + timestamp + "flightCapacity", "\n", ",", OVERWRITE).setParallelism(1);
 
         DataSet<String> midtStrings = env.readTextFile(midtPath);
         DataSet<MIDT> midt = midtStrings.flatMap(new MIDTParser()).withBroadcastSet(airportCountry, AP_GEO_DATA)
@@ -149,14 +154,14 @@ public class TrafficAnalysis {
         DataSet<Tuple7<String, String, Boolean, Boolean, Boolean, Integer, Integer>> APBoundsAgg = midtStrings.flatMap(new MIDTCapacityEmitter(noPartition, DIPartition, fullPartition))
                 .withBroadcastSet(airportCountry, AP_GEO_DATA);
         DataSet<Tuple7<String, String, Boolean, Boolean, Boolean, Integer, Integer>> APBounds = APBoundsAgg.groupBy(0,1,2,3,4).sum(5).andSum(6);
-        //APBounds.writeAsCsv(outputPath + "APBounds", "\n", ",", OVERWRITE).setParallelism(1);
+        //APBounds.writeAsCsv(outputPath + timestamp + "APBounds", "\n", ",", OVERWRITE).setParallelism(1);
 
         DataSet<Tuple5<String, String, String, Integer, Integer>> ODMax = itinerariesWithMIDT.groupBy(0,1,2).reduceGroup(new ODMax());
-        //ODMax.writeAsCsv(outputPath + "ODMax", "\n", ",", OVERWRITE).setParallelism(1);
+        //ODMax.writeAsCsv(outputPath + timestamp + "ODMax", "\n", ",", OVERWRITE).setParallelism(1);
 
         DataSet<Tuple5<String, String, String, Integer, Integer>> ODBounds =
                 ODLowerBound.coGroup(ODMax).where(0,1,2).equalTo(0,1,2).with(new ODBoundMerger());
-        //ODBounds.writeAsCsv(outputPath + "ODBounds", "\n", ",", OVERWRITE).setParallelism(1);
+        //ODBounds.writeAsCsv(outputPath + timestamp + "ODBounds", "\n", ",", OVERWRITE).setParallelism(1);
 
         DataSet<Tuple7<String, String, Boolean, Boolean, Boolean, Integer, Integer>> inOutCapa =
                 nonStopConnections.flatMap(new APCapacityExtractor(noPartition, DIPartition, fullPartition));
@@ -185,27 +190,27 @@ public class TrafficAnalysis {
 
         DataSet<Tuple8<String, String, Boolean, Boolean, Boolean, Integer, Double, Boolean>> incomingMarginals =
                 incomingMarginalsAgg.join(APBounds, JOIN_HINT).where(0,1,2,3,4).equalTo(0,1,2,3,4).with(
-                new JoinFunction<Tuple8<String, String, Boolean, Boolean, Boolean, Integer, Double, Boolean>,
-                        Tuple7<String, String, Boolean, Boolean, Boolean, Integer, Integer>,
-                        Tuple8<String, String, Boolean, Boolean, Boolean, Integer, Double, Boolean>>() {
-                    @Override
-                    public Tuple8<String, String, Boolean, Boolean, Boolean, Integer, Double, Boolean> join(
-                            Tuple8<String, String, Boolean, Boolean, Boolean, Integer, Double, Boolean> marginal,
-                            Tuple7<String, String, Boolean, Boolean, Boolean, Integer, Integer> midtBound) throws Exception {
-                        int estimateResidual = Math.max(marginal.f5 - midtBound.f6, 0);
-                        return new Tuple8<String, String, Boolean, Boolean, Boolean, Integer, Double, Boolean>
-                                (marginal.f0, marginal.f1, marginal.f2, marginal.f3, marginal.f4, estimateResidual, marginal.f6, marginal.f7);
-                    }
-                });
+                        new JoinFunction<Tuple8<String, String, Boolean, Boolean, Boolean, Integer, Double, Boolean>,
+                                Tuple7<String, String, Boolean, Boolean, Boolean, Integer, Integer>,
+                                Tuple8<String, String, Boolean, Boolean, Boolean, Integer, Double, Boolean>>() {
+                            @Override
+                            public Tuple8<String, String, Boolean, Boolean, Boolean, Integer, Double, Boolean> join(
+                                    Tuple8<String, String, Boolean, Boolean, Boolean, Integer, Double, Boolean> marginal,
+                                    Tuple7<String, String, Boolean, Boolean, Boolean, Integer, Integer> midtBound) throws Exception {
+                                int estimateResidual = Math.max(marginal.f5 - midtBound.f6, 0);
+                                return new Tuple8<String, String, Boolean, Boolean, Boolean, Integer, Double, Boolean>
+                                        (marginal.f0, marginal.f1, marginal.f2, marginal.f3, marginal.f4, estimateResidual, marginal.f6, marginal.f7);
+                            }
+                        });
 
         DataSet<Tuple8<String, String, Boolean, Boolean, Boolean, String, Double, Integer>> nonStop =
-                nonStopConnections.flatMap(new FlightDistanceExtractor.FlightDistanceExtractor1());
+                nonStopConnections.flatMap(new FlightDistanceExtractor.FlightDistanceExtractor1(noPartition, DIPartition, fullPartition));
 
         DataSet<Tuple8<String, String, Boolean, Boolean, Boolean, String, Double, Integer>> twoLeg =
-                twoLegConnections.flatMap(new FlightDistanceExtractor.FlightDistanceExtractor2());
+                twoLegConnections.flatMap(new FlightDistanceExtractor.FlightDistanceExtractor2(noPartition, DIPartition, fullPartition));
 
         DataSet<Tuple8<String, String, Boolean, Boolean, Boolean, String, Double, Integer>> threeLeg =
-                threeLegConnections.flatMap(new FlightDistanceExtractor.FlightDistanceExtractor3());
+                threeLegConnections.flatMap(new FlightDistanceExtractor.FlightDistanceExtractor3(noPartition, DIPartition, fullPartition));
 
         DataSet<Tuple8<String, String, Boolean, Boolean, Boolean, String, Double, Integer>> flights = nonStop.union(twoLeg).union(threeLeg);
         DataSet<Tuple7<String, String, String, Boolean, Boolean, Boolean, SerializableVector>> distancesWithoutMaxODTraffic =
@@ -237,13 +242,12 @@ public class TrafficAnalysis {
         DataSet<Tuple5<String, String, String, Double, SerializableVector>> trafficMatrix = distances
                 .join(result.filter(new OutgoingFilter()), JOIN_HINT).where(0,2,3,4,5).equalTo(0,1,2,3,4).with(new TMJoinerOut(useTime, p))
                 .join(result.filter(new IncomingFilter()), JOIN_HINT).where(1,2,3,4,5).equalTo(0,1,2,3,4).with(new TMJoinerIn())
-                .project(0,1,2,6,7);
+                .project(0, 1, 2, 6, 7);
 
         DataSet<Tuple5<String, String, String, Double, SerializableVector>> TMWithMIDT =
                 trafficMatrix.coGroup(ODBounds).where(0,1,2).equalTo(0,1,2).with(new TMMIDTMerger());
 
-        String timestamp = Long.toString(System.currentTimeMillis());
-        TMWithMIDT.project(0,1,3).groupBy(0,1).sum(2).writeAsCsv(outputPath + "trafficMatrix" + timestamp, "\n", ",");
+        TMWithMIDT.project(0,1,3).groupBy(0,1).sum(2).writeAsCsv(outputPath + timestamp + "trafficMatrix", "\n", ",").setParallelism(1);
 
         /*DataSet<Tuple4<String, String, String, LogitOptimizable>> trainedLogit =
                 midt.groupBy(0,1,2).reduceGroup(new LogitTrainer());
@@ -256,9 +260,9 @@ public class TrafficAnalysis {
 
         DataSet<Itinerary> estimate = itinerariesWithMIDT.coGroup(allWeighted).where(0,1,2).equalTo(0,1,2).with(new TrafficEstimator());
 
-        estimate.groupBy(0,1,2).sortGroup(15, Order.DESCENDING).first(1000000000).writeAsCsv(outputPath + "ItineraryEstimate", "\n", ",", OVERWRITE);
+        //estimate.groupBy(0,1,2).sortGroup(15, Order.DESCENDING).first(1000000000).writeAsCsv(outputPath + "ItineraryEstimate", "\n", ",", OVERWRITE);
 
-        estimate.groupBy(0,1).reduceGroup(new ODSum()).writeAsCsv(outputPath + "ODSum", "\n", ",", OVERWRITE).setParallelism(1);
+        estimate.groupBy(0,1).reduceGroup(new ODSum()).writeAsCsv(outputPath + timestamp + "ODSum", "\n", ",", OVERWRITE).setParallelism(1);
         */
         //System.out.println(env.getExecutionPlan());
         env.execute("TrafficAnalysis");
