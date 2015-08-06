@@ -29,11 +29,12 @@ public class TAUtil {
         return numerator/denominator;*/
         //return 1.0/Math.sqrt(minTravelTime*avgTravelTime*distance);
         //return ((maxODTraffic*maxODTraffic)/count)/(minTravelTime*avgTravelTime*distance);
-        if(useTime) {
+        /*if(useTime) {
             return 1.0/Math.pow(minTravelTime, p);
         }else {
             return 1.0/Math.pow(distance, p);
-        }
+        }*/
+        return 1.0/Math.pow(minTravelTime*distance,p);
 
     }
 

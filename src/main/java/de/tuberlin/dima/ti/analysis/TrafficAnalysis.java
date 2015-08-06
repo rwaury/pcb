@@ -38,6 +38,7 @@ public class TrafficAnalysis {
 
     public static final int OD_FEATURE_COUNT = 6;
 
+    public static final double p05 = 0.5;
     public static final double p1 = 1.0;
     public static final double p15 = 1.5;
     public static final double p2 = 2.0;
@@ -79,30 +80,57 @@ public class TrafficAnalysis {
     private static final FileSystem.WriteMode OVERWRITE = FileSystem.WriteMode.OVERWRITE;
 
     public static void main(String[] args) throws Exception {
-        ti(true,    p1,     true, false, false);
-        /*ti(true,    p15,    true, false, false);
+        /*ti(true,    p1,     true, false, false);
+        ti(true,    p15,    true, false, false);
         ti(true,    p2,     true, false, false);
         ti(false,   p1,     true, false, false);
         ti(false,   p15,    true, false, false);
-        ti(false,   p2,     true, false, false);*/
+        ti(false,   p2,     true, false, false);
 
         ti(true,    p1,     false, true, false);
-        /*ti(true,    p15,    false, true, false);
+        ti(true,    p15,    false, true, false);
         ti(true,    p2,     false, true, false);
         ti(false,   p1,     false, true, false);
         ti(false,   p15,    false, true, false);
         ti(false,   p2,     false, true, false);
-        */
+
         ti(true,    p1,     false, false, true);
-        /*ti(true,    p15,    false, false, true);
+        ti(true,    p15,    false, false, true);
         ti(true,    p2,     false, false, true);
         ti(false,   p1,     false, false, true);
         ti(false,   p15,    false, false, true);
-        ti(false,   p2,     false, false, true);*/
+        ti(false,   p2,     false, false, true);
+
+        ti(true,    p05,     true, false, false);
+        ti(false,   p05,     true, false, false);
+        ti(true,    p05,     false, true, false);
+        ti(false,   p05,     false, true, false);
+        ti(true,    p05,     false, false, true);
+        ti(false,   p05,     false, false, true);
+        
+        ti(true,    p05,     true, false, false);
+        ti(true,    p1,     true, false, false);
+        ti(true,    p15,     true, false, false);
+        ti(true,    p2,     true, false, false);
+
+        ti(true,    p05,     false, true, false);
+        ti(true,    p1,     false, true, false);
+        ti(true,    p15,     false, true, false);*/
+        ti(true,    p2,     false, true, false);
+
+        ti(true,    p05,     false, false, true);
+        ti(true,    p1,     false, false, true);
+        ti(true,    p15,     false, false, true);
+        ti(true,    p2,     false, false, true);
     }
 
     public static void ti(boolean useTime, double p, boolean noPartition, boolean DIPartition, boolean fullPartition) throws Exception {
-        String timestamp = Long.toString(System.currentTimeMillis());
+        String partitionString = "";
+        if(noPartition) partitionString = "noPartition";
+        if(DIPartition) partitionString = "DIPartition";
+        if(fullPartition) partitionString = "fullPartition";
+        String description = '_' + "timedist" + '_' + p + '_' + partitionString;
+        //String timestamp = Long.toString(System.currentTimeMillis());
 
         ExecutionEnvironment env = ExecutionEnvironment.getExecutionEnvironment();
 
@@ -247,7 +275,7 @@ public class TrafficAnalysis {
         DataSet<Tuple5<String, String, String, Double, SerializableVector>> TMWithMIDT =
                 trafficMatrix.coGroup(ODBounds).where(0,1,2).equalTo(0,1,2).with(new TMMIDTMerger());
 
-        TMWithMIDT.project(0,1,3).groupBy(0,1).sum(2).writeAsCsv(outputPath + timestamp + "trafficMatrix", "\n", ",").setParallelism(1);
+        TMWithMIDT.project(0,1,3).groupBy(0,1).sum(2).writeAsCsv(outputPath + "trafficMatrix" + description, "\n", ",").setParallelism(1);
 
         /*DataSet<Tuple4<String, String, String, LogitOptimizable>> trainedLogit =
                 midt.groupBy(0,1,2).reduceGroup(new LogitTrainer());
