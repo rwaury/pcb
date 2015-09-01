@@ -59,10 +59,10 @@ public class TrafficEstimator implements CoGroupFunction<Itinerary, Tuple5<Strin
         }
         for(Itinerary e : itineraries) {
             double itineraryEstimate = LogitOptimizable.softmax(e, softmaxSum, weights, minTime)*estimateWithoutMIDT;
-            int roundedEstimate = (int)Math.round(itineraryEstimate) + e.f13;
-            roundedEstimate = Math.min(roundedEstimate, e.f14); // enforce lower and upper bound on itinerary level
-            if(roundedEstimate > 0) {
-                e.f15 = roundedEstimate;
+            double fullEstimate = itineraryEstimate + e.f13.doubleValue();
+            fullEstimate = Math.min(fullEstimate, e.f14.doubleValue()); // enforce lower and upper bound on itinerary level
+            if(fullEstimate > 0) {
+                e.f15 = fullEstimate;
                 e.f16 = itineraryEstimate;
                 e.f17 = estimate;
                 out.collect(e);

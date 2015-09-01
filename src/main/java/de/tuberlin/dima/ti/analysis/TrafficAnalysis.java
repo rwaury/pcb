@@ -107,7 +107,7 @@ public class TrafficAnalysis {
         ti(false,   p05,     false, true, false);
         ti(true,    p05,     false, false, true);
         ti(false,   p05,     false, false, true);
-        
+
         ti(true,    p05,     true, false, false);
         ti(true,    p1,     true, false, false);
         ti(true,    p15,     true, false, false);
@@ -115,13 +115,14 @@ public class TrafficAnalysis {
 
         ti(true,    p05,     false, true, false);
         ti(true,    p1,     false, true, false);
-        ti(true,    p15,     false, true, false);*/
+        ti(true,    p15,     false, true, false);
         ti(true,    p2,     false, true, false);
 
         ti(true,    p05,     false, false, true);
         ti(true,    p1,     false, false, true);
         ti(true,    p15,     false, false, true);
-        ti(true,    p2,     false, false, true);
+        ti(true,    p2,     false, false, true);*/
+        ti(true,    p05,     false, true, false);
     }
 
     public static void ti(boolean useTime, double p, boolean noPartition, boolean DIPartition, boolean fullPartition) throws Exception {
@@ -172,7 +173,7 @@ public class TrafficAnalysis {
 
         DataSet<String> midtStrings = env.readTextFile(midtPath);
         DataSet<MIDT> midt = midtStrings.flatMap(new MIDTParser()).withBroadcastSet(airportCountry, AP_GEO_DATA)
-                .map(new MIDTCompressor()).groupBy(0,1,2,3,4,5,6,7).reduceGroup(new MIDTGrouper());
+                .groupBy(0, 1, 2, 3, 4, 5, 6, 7).reduceGroup(new MIDTGrouper());
         DataSet<Tuple5<String, String, String, Integer, Integer>> ODLowerBound = midt.map(new LowerBoundExtractor()).groupBy(0,1,2).sum(3).andSum(4);
 
         // group sort and first-1 is necessary to exclude multileg connections that yield the same OD (only the fastest is included)
@@ -277,7 +278,7 @@ public class TrafficAnalysis {
 
         TMWithMIDT.project(0,1,3).groupBy(0,1).sum(2).writeAsCsv(outputPath + "trafficMatrix" + description, "\n", ",").setParallelism(1);
 
-        /*DataSet<Tuple4<String, String, String, LogitOptimizable>> trainedLogit =
+        DataSet<Tuple4<String, String, String, LogitOptimizable>> trainedLogit =
                 midt.groupBy(0,1,2).reduceGroup(new LogitTrainer());
 
         DataSet<Tuple6<String, String, String, Double, SerializableVector, LogitOptimizable>> TMWithWeights =
@@ -288,10 +289,12 @@ public class TrafficAnalysis {
 
         DataSet<Itinerary> estimate = itinerariesWithMIDT.coGroup(allWeighted).where(0,1,2).equalTo(0,1,2).with(new TrafficEstimator());
 
+        estimate.map(new Itin2Agg()).groupBy(0,1,2,3,4,5,6).sum(7).writeAsCsv(outputPath + "ItineraryEstimateAgg", "\n", ";", OVERWRITE);
+
         //estimate.groupBy(0,1,2).sortGroup(15, Order.DESCENDING).first(1000000000).writeAsCsv(outputPath + "ItineraryEstimate", "\n", ",", OVERWRITE);
 
-        estimate.groupBy(0,1).reduceGroup(new ODSum()).writeAsCsv(outputPath + timestamp + "ODSum", "\n", ",", OVERWRITE).setParallelism(1);
-        */
+        estimate.groupBy(0,1).reduceGroup(new ODSum()).writeAsCsv(outputPath + "ODSum", "\n", ",", OVERWRITE).setParallelism(1);
+
         //System.out.println(env.getExecutionPlan());
         env.execute("TrafficAnalysis");
     }
@@ -447,6 +450,28 @@ public class TrafficAnalysis {
         @Override
         public boolean filter(Tuple8<String, String, String, String, String, Double, Double, String> geoData) throws Exception {
             return geoData.f3.equals("US");
+        }
+    }
+
+    private static class Itin2Agg implements MapFunction<Itinerary, Tuple8<String, String, String, String, String, String, String, Double>> {
+
+        @Override
+        public Tuple8<String, String, String, String, String, String, String, Double> map(Itinerary itinerary) throws Exception {
+            String origin = itinerary.f0;
+            String hub1 = itinerary.f20;
+            String hub2 = itinerary.f21;
+            String destination = itinerary.f1;
+            String airline1 = itinerary.f3.substring(0,2);
+            String airline2 = "";
+            if(!itinerary.f4.isEmpty()) {
+                airline2 = itinerary.f4.substring(0,2);
+            }
+            String airline3 = "";
+            if(!itinerary.f5.isEmpty()) {
+                airline3 = itinerary.f5.substring(0,2);
+            }
+            double estimate = itinerary.f15;
+            return new Tuple8<String, String, String, String, String, String, String, Double>(origin, hub1, hub2, destination, airline1, airline2, airline3, estimate);
         }
     }
 

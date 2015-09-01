@@ -58,6 +58,11 @@ public class MIDTParser extends RichFlatMapFunction<String, MIDT> {
         String flight4 = "";
         String flight5 = "";
 
+        String hub1 = "";
+        String hub2 = "";
+        String hub3 = "";
+        String hub4 = "";
+
         long departureDay = Long.parseLong(tmp[11].trim())-1;
         if(departureDay > 6) {
             throw new Exception("Value error: " + s);
@@ -94,6 +99,7 @@ public class MIDTParser extends RichFlatMapFunction<String, MIDT> {
             travelledDistance += CBUtil.dist(o.latitude, o.longitude, d.latitude, d.longitude);
             countries.add(o.country);
             countries.add(d.country);
+            hub1 = ap1;
         }
         if(segmentCount > 2) {
             flight3 = tmp[27].trim() + tmp[28].replaceAll("[^0-9]", "");
@@ -110,6 +116,7 @@ public class MIDTParser extends RichFlatMapFunction<String, MIDT> {
             travelledDistance += CBUtil.dist(o.latitude, o.longitude, d.latitude, d.longitude);
             countries.add(o.country);
             countries.add(d.country);
+            hub2 = ap1;
         }
         if(segmentCount > 3) {
             flight4 = tmp[36].trim() + tmp[37].replaceAll("[^0-9]", "");
@@ -126,6 +133,7 @@ public class MIDTParser extends RichFlatMapFunction<String, MIDT> {
             travelledDistance += CBUtil.dist(o.latitude, o.longitude, d.latitude, d.longitude);
             countries.add(o.country);
             countries.add(d.country);
+            hub3 = ap1;
         }
         if(segmentCount > 4) {
             flight5 = tmp[45].trim() + tmp[46].replaceAll("[^0-9]", "");
@@ -142,6 +150,7 @@ public class MIDTParser extends RichFlatMapFunction<String, MIDT> {
             travelledDistance += CBUtil.dist(o.latitude, o.longitude, d.latitude, d.longitude);
             countries.add(o.country);
             countries.add(d.country);
+            hub4 = ap1;
         }
         int travelTime = arrival - departure;
         if(travelTime < 1) {
@@ -154,8 +163,46 @@ public class MIDTParser extends RichFlatMapFunction<String, MIDT> {
         MIDT result = new MIDT(origin, destination, dayString,
                 flight1, flight2, flight3, flight4, flight5, travelTime, waitingTime,
                 segmentCount, pax, geoDetour, Math.max(1, countries.size()));
-        out.collect(result);
+        out.collect(compress(result, hub1, hub2, hub3, hub4));
     }
+
+    private MIDT compress(MIDT midt, String hub1, String hub2, String hub3, String hub4) {
+        String flight1 = midt.f3;
+        String flight2 = midt.f4;
+        String flight3 = midt.f5;
+        String flight4 = midt.f6;
+        String flight5 = midt.f7;
+        if(flight1.equals(flight2)) {
+            flight2 = flight3;
+            flight3 = flight4;
+            flight4 = flight5;
+            flight5 = "";
+            hub1 = hub2;
+            hub2 = hub3;
+            hub3 = hub4;
+            hub4 = "";
+        }
+        if(flight2.equals(flight3)) {
+            flight3 = flight4;
+            flight4 = flight5;
+            flight5 = "";
+            hub2 = hub3;
+            hub3 = hub4;
+            hub4 = "";
+        }
+        if(flight3.equals(flight4)) {
+            flight4 = flight5;
+            flight5 = "";
+            hub3 = hub4;
+            hub4 = "";
+        }
+        if(flight4.equals(flight5)) {
+            flight5 = "";
+            hub4 = "";
+        }
+        return new MIDT(midt.f0, midt.f1, midt.f2, flight1, flight2, flight3, flight4, flight5, midt.f8, midt.f9, midt.f10, midt.f11, midt.f12, midt.f13, hub1, hub2);
+    }
+
 
     private class AirportInfo {
 

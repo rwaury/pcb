@@ -1,10 +1,10 @@
 package de.tuberlin.dima.ti.analysis;
 
-import org.apache.flink.api.java.tuple.Tuple14;
+import org.apache.flink.api.java.tuple.Tuple16;
 
 import java.util.HashSet;
 
-public class MIDT extends Tuple14<String, String, String, String, String, String, String, String, Integer, Integer, Integer, Integer, Double, Integer> {
+public class MIDT extends Tuple16<String, String, String, String, String, String, String, String, Integer, Integer, Integer, Integer, Double, Integer, String, String> {
 
     public MIDT() {
         super();
@@ -27,6 +27,28 @@ public class MIDT extends Tuple14<String, String, String, String, String, String
         this.f11 = pax;
         this.f12 = geoDetour;
         this.f13 = numCountries;
+    }
+
+    public MIDT(String origin, String destination, String day,
+                String flight1, String flight2, String flight3, String flight4, String flight5,
+                Integer travelTime, Integer waitingTime, Integer legCount, Integer pax, Double geoDetour, Integer numCountries,
+                String hub1, String hub2) {
+        this.f0 = origin;
+        this.f1 = destination;
+        this.f2 = day;
+        this.f3 = flight1;
+        this.f4 = flight2;
+        this.f5 = flight3;
+        this.f6 = flight4;
+        this.f7 = flight5;
+        this.f8 = travelTime;
+        this.f9 = waitingTime;
+        this.f10 = legCount;
+        this.f11 = pax;
+        this.f12 = geoDetour;
+        this.f13 = numCountries;
+        this.f14 = hub1;
+        this.f15 = hub2;
     }
 
     public int getNumAirlines() {

@@ -34,8 +34,11 @@ public class TAUtil {
         }else {
             return 1.0/Math.pow(distance, p);
         }*/
-        return 1.0/Math.pow(minTravelTime*distance,p);
-
+        if(isInternational) {
+            return 1.0/Math.pow(minTravelTime*distance,0.5);
+        } else {
+            return 1.0/Math.pow(distance,0.5);
+        }
     }
 
     public static double mahalanobisDistance(ArrayRealVector x, ArrayRealVector y, Array2DRowRealMatrix Sinv) {
@@ -47,6 +50,6 @@ public class TAUtil {
 
     // Converts aggregated MIDT to Itinerary with estimate
     public static Itinerary MIDTToItinerary(MIDT midt) {
-        return new Itinerary(midt.f0, midt.f1, midt.f2, midt.f3, midt.f4, midt.f5, midt.f6, midt.f7, -1.0, -1.0, midt.f8, midt.f9, midt.f10, midt.f11, midt.f11, midt.f11, -1.0, -1.0, "MIDT", midt.f13);
+        return new Itinerary(midt.f0, midt.f1, midt.f2, midt.f3, midt.f4, midt.f5, midt.f6, midt.f7, -1.0, -1.0, midt.f8, midt.f9, midt.f10, midt.f11, midt.f11, midt.f11.doubleValue(), -1.0, -1.0, "MIDT", midt.f13, midt.f14, midt.f15);
     }
 }

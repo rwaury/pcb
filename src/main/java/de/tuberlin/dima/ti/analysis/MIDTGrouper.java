@@ -19,7 +19,7 @@ public class MIDTGrouper extends RichGroupReduceFunction<MIDT, MIDT> {
             paxSum += midt.f11;
             count++;
         }
-        MIDT result = new MIDT(midt.f0, midt.f1, midt.f2, midt.f3, midt.f4, midt.f5, midt.f6, midt.f7, midt.f8, midt.f9, midt.f10, paxSum, midt.f12, midt.f13);
+        MIDT result = new MIDT(midt.f0, midt.f1, midt.f2, midt.f3, midt.f4, midt.f5, midt.f6, midt.f7, midt.f8, midt.f9, midt.f10, paxSum, midt.f12, midt.f13, midt.f14, midt.f15);
         out.collect(result);
     }
 }

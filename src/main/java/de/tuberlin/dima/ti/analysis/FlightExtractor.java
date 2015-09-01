@@ -31,7 +31,7 @@ public class FlightExtractor {
             Integer travelTime = Math.max((int) ((flight.getArrivalTimestamp() - flight.getDepartureTimestamp())/(60L*1000L)), 1);
             out.collect(new Itinerary(flight.getOriginAirport(), flight.getDestinationAirport(), dayString,
                     flight.getAirline() + flight.getFlightNumber(), "", "", "", "", distance, distance, travelTime, 0,
-                    flight.getLegCount(), 0, flight.getMaxCapacity(), -1, -1.0, -1.0, "", numCountries));
+                    flight.getLegCount(), 0, flight.getMaxCapacity(), -1.0, -1.0, -1.0, "", numCountries, "", ""));
         }
     }
 
@@ -59,7 +59,7 @@ public class FlightExtractor {
             Integer maxCapacity = Math.min(flight.f0.getMaxCapacity(), flight.f1.getMaxCapacity());
             out.collect(new Itinerary(flight.f0.getOriginAirport(), flight.f1.getDestinationAirport(), dayString,
                     flight.f0.getAirline() + flight.f0.getFlightNumber(), flight.f1.getAirline() + flight.f1.getFlightNumber(), "", "", "",
-                    directDistance, travelledDistance, travelTime, waitingTime, legCount, 0, maxCapacity, -1, -1.0, -1.0, "", Math.max(1, countries.size())));
+                    directDistance, travelledDistance, travelTime, waitingTime, legCount, 0, maxCapacity, -1.0, -1.0, -1.0, "", Math.max(1, countries.size()), flight.f1.getOriginAirport(), ""));
         }
     }
 
@@ -93,7 +93,7 @@ public class FlightExtractor {
             Integer maxCapacity = Math.min(flight.f0.getMaxCapacity(), Math.min(flight.f1.getMaxCapacity(), flight.f2.getMaxCapacity()));
             out.collect(new Itinerary(flight.f0.getOriginAirport(), flight.f2.getDestinationAirport(), dayString,
                     flight.f0.getAirline() + flight.f0.getFlightNumber(), flight.f1.getAirline() + flight.f1.getFlightNumber(), flight.f2.getAirline() + flight.f2.getFlightNumber(), "", "",
-                    directDistance, travelledDistance, travelTime, waitingTime, legCount, 0, maxCapacity, -1, -1.0, -1.0, "", Math.max(1, countries.size())));
+                    directDistance, travelledDistance, travelTime, waitingTime, legCount, 0, maxCapacity, -1.0, -1.0, -1.0, "", Math.max(1, countries.size()), flight.f1.getOriginAirport(), flight.f2.getOriginAirport()));
         }
     }
 }

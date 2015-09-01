@@ -1,10 +1,10 @@
 package de.tuberlin.dima.ti.analysis;
 
-import org.apache.flink.api.java.tuple.Tuple20;
+import org.apache.flink.api.java.tuple.Tuple22;
 
 import java.util.HashSet;
 
-public class Itinerary extends Tuple20<String, String, String, String, String, String, String, String, Double, Double, Integer, Integer, Integer, Integer, Integer, Integer, Double, Double, String, Integer> {
+public class Itinerary extends Tuple22<String, String, String, String, String, String, String, String, Double, Double, Integer, Integer, Integer, Integer, Integer, Double, Double, Double, String, Integer, String, String> {
 
     public Itinerary(){
         super();
@@ -13,7 +13,8 @@ public class Itinerary extends Tuple20<String, String, String, String, String, S
     public Itinerary(String origin, String destination, String day,
                      String flight1, String flight2, String flight3, String flight4, String flight5,
                      Double directDistance, Double travelDistance, Integer travelTime, Integer waitingTime,
-                     Integer legCount, Integer lowerBound, Integer maxCapacity, Integer paxEstimate, Double paxEstimateModel, Double ODEstimate, String full, Integer numCountries) {
+                     Integer legCount, Integer lowerBound, Integer maxCapacity, Double paxEstimate, Double paxEstimateModel, Double ODEstimate, String full, Integer numCountries,
+                     String hub1, String hub2) {
         this.f0 = origin;
         this.f1 = destination;
         this.f2 = day;
@@ -34,29 +35,33 @@ public class Itinerary extends Tuple20<String, String, String, String, String, S
         this.f17 = ODEstimate;
         this.f18 = full;
         this.f19 = numCountries;
+        this.f20 = hub1;
+        this.f21 = hub2;
     }
 
-    public Itinerary(Tuple20<String, String, String, String, String, String, String, String, Double, Double, Integer, Integer, Integer, Integer, Integer, Integer, Double, Double, String, Integer> tuple20) {
-        this.f0 = tuple20.f0;
-        this.f1 = tuple20.f1;
-        this.f2 = tuple20.f2;
-        this.f3 = tuple20.f3;
-        this.f4 = tuple20.f4;
-        this.f5 = tuple20.f5;
-        this.f6 = tuple20.f6;
-        this.f7 = tuple20.f7;
-        this.f8 = tuple20.f8;
-        this.f9 = tuple20.f9;
-        this.f10 = tuple20.f10;
-        this.f11 = tuple20.f11;
-        this.f12 = tuple20.f12;
-        this.f13 = tuple20.f13;
-        this.f14 = tuple20.f14;
-        this.f15 = tuple20.f15;
-        this.f16 = tuple20.f16;
-        this.f17 = tuple20.f17;
-        this.f18 = tuple20.f18;
-        this.f19 = tuple20.f19;
+    public Itinerary(Tuple22<String, String, String, String, String, String, String, String, Double, Double, Integer, Integer, Integer, Integer, Integer, Double, Double, Double, String, Integer, String, String> tuple22) {
+        this.f0 = tuple22.f0;
+        this.f1 = tuple22.f1;
+        this.f2 = tuple22.f2;
+        this.f3 = tuple22.f3;
+        this.f4 = tuple22.f4;
+        this.f5 = tuple22.f5;
+        this.f6 = tuple22.f6;
+        this.f7 = tuple22.f7;
+        this.f8 = tuple22.f8;
+        this.f9 = tuple22.f9;
+        this.f10 = tuple22.f10;
+        this.f11 = tuple22.f11;
+        this.f12 = tuple22.f12;
+        this.f13 = tuple22.f13;
+        this.f14 = tuple22.f14;
+        this.f15 = tuple22.f15;
+        this.f16 = tuple22.f16;
+        this.f17 = tuple22.f17;
+        this.f18 = tuple22.f18;
+        this.f19 = tuple22.f19;
+        this.f20 = tuple22.f20;
+        this.f21 = tuple22.f21;
     }
 
     public Itinerary deepCopy() {
