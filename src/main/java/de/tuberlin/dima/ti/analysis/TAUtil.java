@@ -41,13 +41,6 @@ public class TAUtil {
         }
     }
 
-    public static double mahalanobisDistance(ArrayRealVector x, ArrayRealVector y, Array2DRowRealMatrix Sinv) {
-        ArrayRealVector xmy = x.subtract(y);
-        RealVector SinvXmy = Sinv.operate(xmy);
-        double result = xmy.dotProduct(SinvXmy);
-        return Math.sqrt(result);
-    }
-
     // Converts aggregated MIDT to Itinerary with estimate
     public static Itinerary MIDTToItinerary(MIDT midt) {
         return new Itinerary(midt.f0, midt.f1, midt.f2, midt.f3, midt.f4, midt.f5, midt.f6, midt.f7, -1.0, -1.0, midt.f8, midt.f9, midt.f10, midt.f11, midt.f11, midt.f11.doubleValue(), -1.0, -1.0, "MIDT", midt.f13, midt.f14, midt.f15);
