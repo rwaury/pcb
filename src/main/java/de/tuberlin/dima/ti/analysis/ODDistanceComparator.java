@@ -16,6 +16,8 @@ public class ODDistanceComparator implements
                 Tuple5<String, String, String, Double, SerializableVector>,
                 Tuple5<String, String, String, Double, LogitOptimizable>> {
 
+    private static final boolean BIAS_CORRECTION = true;
+
     private boolean useEuclidean;
 
     public ODDistanceComparator(boolean useEuclidean) {
@@ -58,7 +60,7 @@ public class ODDistanceComparator implements
         } else {
             ArrayRealVector mu = new ArrayRealVector(TrafficAnalysis.OD_FEATURE_COUNT, 0.0);
             int count = 0;
-            StorelessCovariance S = new StorelessCovariance(TrafficAnalysis.OD_FEATURE_COUNT, true);
+            StorelessCovariance S = new StorelessCovariance(TrafficAnalysis.OD_FEATURE_COUNT, BIAS_CORRECTION);
             for(Tuple6<String, String, String, Double, SerializableVector, LogitOptimizable> w : weightedODs) {
                 mu.add(w.f4.getVector());
                 weighted.add(w.copy());

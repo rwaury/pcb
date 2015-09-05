@@ -19,38 +19,8 @@ import java.util.HashMap;
 
 public class ItineraryShareEstimation {
 
-    // calendar week 19 2014
-    public static long firstPossibleTimestamp = 1399248000000L;
-    public static long lastPossibleTimestamp = 1399852799000L;
-
-    public static final double SLF = 0.797;
-
-    public static final double WAITING_FACTOR = 1.0;
-
-    public static final int MAX_ITERATIONS = 10;
-
-    public static final double OPTIMIZER_TOLERANCE = 0.000001;
-
-    public static final int MAX_OPTIMIZER_ITERATIONS = 1000;
 
     public static String AP_GEO_DATA = "AirportGeoDataBroadcastSet";
-
-    public static String INVERTED_COVARIANCE_MATRIX = "InvertedCovarianceMatrixBroadcastSet";
-
-    public static final int OD_FEATURE_COUNT = 6;
-
-    public static final double p05 = 0.5;
-    public static final double p1 = 1.0;
-    public static final double p15 = 1.5;
-    public static final double p2 = 2.0;
-
-    public final static ArrayList<String> countriesWithStates = new ArrayList<String>() {{
-        add("AR");
-        add("AU");
-        add("BR");
-        add("CA");
-        add("US");
-    }};
 
     public final static SimpleDateFormat dayFormat = new SimpleDateFormat("ddMMyyyy");
 
@@ -67,8 +37,8 @@ public class ItineraryShareEstimation {
     private static final FileSystem.WriteMode OVERWRITE = FileSystem.WriteMode.OVERWRITE;
 
     public static void main(String[] args) throws Exception {
-        ise(true, true, TrainingData.MIDT, Logit.MNL);
-        ise(true, false, TrainingData.MIDT, Logit.MNL);
+        ise(false, true, TrainingData.MIDT, Logit.MNL);
+        ise(false, false, TrainingData.MIDT, Logit.MNL);
 
         ise(true, true, TrainingData.DB1B, Logit.MNL);
         ise(true, false, TrainingData.DB1B, Logit.MNL);
@@ -89,7 +59,39 @@ public class ItineraryShareEstimation {
     public static void ise(boolean spreadOverWeek, boolean useEuclidean, TrainingData td, Logit logit) throws Exception {
         ExecutionEnvironment env = ExecutionEnvironment.getExecutionEnvironment();
 
-        String description = "";
+        String regressionMethod;
+        if(logit == Logit.MNL) {
+            regressionMethod = "MNL";
+        } else if(logit == Logit.CLOGIT) {
+            regressionMethod = "CLOGIT";
+        } else if(logit == Logit.PSL) {
+            regressionMethod = "PSL";
+        } else{
+            throw new Exception("Unknown logit parameter: " + Logit.values()[logit.ordinal()]);
+        }
+
+        String ticketTrainingData;
+        if(td == TrainingData.MIDT) {
+            ticketTrainingData = "MIDT-only";
+        } else if(td == TrainingData.DB1B) {
+            ticketTrainingData = "DB1B-only";
+        } else if(td == TrainingData.BOTH_MERGED) {
+            ticketTrainingData = "MIDT-DB1B";
+        } else if(td == TrainingData.BOTH_US_SEPARATE) {
+            ticketTrainingData = "MIDT-DB1B-separate";
+        } else {
+            throw new Exception("Unknown data usage parameter: " + TrainingData.values()[td.ordinal()]);
+        }
+
+        String distanceMetric = useEuclidean ? "Euclidean" : "Mahalanobis";
+
+        String description;
+        if(spreadOverWeek) {
+            description = '_' + regressionMethod + '_' + ticketTrainingData + '_' + "spread" + '_' + distanceMetric;
+        } else {
+            description = '_' + regressionMethod + '_' + ticketTrainingData + '_' + distanceMetric;
+        }
+        
         // extract coordinates of all known airports
         DataSet<Tuple8<String, String, String, String, String, Double, Double, String>> airportCoordinatesNR =
                 env.readTextFile(oriPath).flatMap(new AirportCoordinateExtractor());
@@ -195,7 +197,7 @@ public class ItineraryShareEstimation {
 
         /* IPF START */
         IterativeDataSet<Tuple8<String, String, Boolean, Boolean, Boolean, Integer, Double, Boolean>> initial =
-                outgoingMarginals.union(incomingMarginals).iterate(MAX_ITERATIONS);
+                outgoingMarginals.union(incomingMarginals).iterate(TrafficAnalysis.MAX_ITERATIONS);
 
         DataSet<Tuple7<String, String, String, Boolean, Boolean, Boolean, Double>> KiFractions = distances
                 .join(initial.filter(new IncomingFilter()), JOIN_HINT).where(1,2,3,4,5).equalTo(0,1,2,3,4).with(new KJoiner(false, 0.5));
@@ -260,11 +262,11 @@ public class ItineraryShareEstimation {
 
         DataSet<Itinerary> estimate = itinerariesWithMIDT.coGroup(allWeighted).where(0,1,2).equalTo(0,1,2).with(new TrafficEstimator());
 
-        estimate.map(new Itin2Agg()).groupBy(0,1,2,3,4,5,6).sum(7).writeAsCsv(outputPath + "ItineraryEstimateAgg", "\n", ";", OVERWRITE);
+        estimate.map(new Itin2Agg()).groupBy(0,1,2,3,4,5,6).sum(7).writeAsCsv(outputPath + "ItineraryEstimateAgg" + description, "\n", ";", OVERWRITE);
 
         //estimate.groupBy(0,1,2).sortGroup(15, Order.DESCENDING).first(1000000000).writeAsCsv(outputPath + "ItineraryEstimate", "\n", ",", OVERWRITE);
 
-        estimate.groupBy(0,1).reduceGroup(new ODSum()).writeAsCsv(outputPath + "ODSum", "\n", ",", OVERWRITE).setParallelism(1);
+        estimate.groupBy(0,1).reduceGroup(new ODSum()).writeAsCsv(outputPath + "ODSum" + description, "\n", ",", OVERWRITE).setParallelism(1);
 
         //System.out.println(env.getExecutionPlan());
         env.execute("ItineraryShareEstimation");
