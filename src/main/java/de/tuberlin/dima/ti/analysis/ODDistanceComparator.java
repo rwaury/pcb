@@ -2,6 +2,7 @@ package de.tuberlin.dima.ti.analysis;
 
 import org.apache.commons.math3.linear.*;
 import org.apache.commons.math3.stat.correlation.Covariance;
+import org.apache.commons.math3.stat.correlation.StorelessCovariance;
 import org.apache.flink.api.common.functions.CoGroupFunction;
 import org.apache.flink.api.java.tuple.Tuple5;
 import org.apache.flink.api.java.tuple.Tuple6;
@@ -57,19 +58,14 @@ public class ODDistanceComparator implements
         } else {
             ArrayRealVector mu = new ArrayRealVector(TrafficAnalysis.OD_FEATURE_COUNT, 0.0);
             int count = 0;
+            StorelessCovariance S = new StorelessCovariance(TrafficAnalysis.OD_FEATURE_COUNT, true);
             for(Tuple6<String, String, String, Double, SerializableVector, LogitOptimizable> w : weightedODs) {
                 mu.add(w.f4.getVector());
                 weighted.add(w.copy());
+                S.increment(w.f4.getVector().toArray());
                 count++;
             }
             mu.mapDivideToSelf((double) count);
-            Array2DRowRealMatrix covariants = new Array2DRowRealMatrix(TrafficAnalysis.OD_FEATURE_COUNT, count);
-            int i = 0;
-            for(Tuple6<String, String, String, Double, SerializableVector, LogitOptimizable> w : weighted) {
-                covariants.setColumn(i, w.f4.getVector().toArray());
-                i++;
-            }
-            Covariance S = new Covariance(covariants, true);
             RealMatrix Sinv = MatrixUtils.inverse(S.getCovarianceMatrix());
             double distance = 0.0;
             for(Tuple5<String, String, String, Double, SerializableVector> uw : unweightedODs) {
