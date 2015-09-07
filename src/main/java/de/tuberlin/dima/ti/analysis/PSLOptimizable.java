@@ -4,23 +4,30 @@ import cc.mallet.optimize.Optimizable;
 
 import java.util.ArrayList;
 
-public class LogitOptimizable extends SerializableVector implements Optimizable.ByGradientValue {
+public class PSLOptimizable extends SerializableVector implements Optimizable.ByGradientValue {
 
     private static int FEATURE_COUNT = 6;
 
     private ArrayList<TrainingData> trainingData;
 
+    private ArrayList<Double> PS;
+
+    private double BETA;
+
     private double[] valueCache = null;
 
-    public LogitOptimizable() {
+    public PSLOptimizable(double beta) {
         super(FEATURE_COUNT+1);
+        this.BETA = beta;
         for(int i = 0; i < this.getVector().getDimension(); i++) {
             this.getVector().setEntry(i, 1.0);
         }
     }
 
-    public void setTrainingData(ArrayList<TrainingData> trainingData, int minTravelTime) {
+    public void setTrainingData(ArrayList<TrainingData> trainingData, int minTravelTime, ArrayList<Double> PS) {
         this.trainingData = trainingData;
+        this.PS = PS;
+        assert PS.size() == trainingData.size();
         for(TrainingData t : this.trainingData) {
             t.features[1] = t.features[1]/(double)minTravelTime;
         }
@@ -45,23 +52,23 @@ public class LogitOptimizable extends SerializableVector implements Optimizable.
     @Override
     public void getValueGradient(double[] gradient) {
         assert  gradient.length == this.getVector().getDimension();
-        double[] avg = new double[gradient.length];
+        double[] sum = new double[gradient.length];
         for(int i = 0; i < this.trainingData.size(); i++) {
             TrainingData ti = this.trainingData.get(i);
-            //double[] tmp = new double[gradient.length];
-            //add(tmp, ti.features);
-            //multiply(tmp, softmax(i));
-            //add(avg, tmp);
-            add(avg, ti.features);
+            double[] tmp = new double[gradient.length];
+            add(tmp, ti.features);
+            multiply(tmp, softmax(i));
+            add(sum, tmp);
+            //add(avg, ti.features);
         }
-        double n = (double) this.trainingData.size();
-        multiply(avg, 1.0/n);
+        //double n = (double) this.trainingData.size();
+        //multiply(avg, 1.0/n);
         for(int i = 0; i < gradient.length; i++) {
             gradient[i] = 0.0;
         }
         for(int i = 0; i < this.trainingData.size(); i++) {
             TrainingData ti = this.trainingData.get(i);
-            double[] s = minus(ti.features, avg);
+            double[] s = minus(ti.features, sum);
             multiply(s, (double)ti.hits);
             add(gradient, s);
         }
@@ -111,20 +118,22 @@ public class LogitOptimizable extends SerializableVector implements Optimizable.
 
     private double softmax(int i) {
         double sum = 0.0;
-        for(TrainingData t : this.trainingData) {
-            sum += Math.exp(linearPredictorFunction(t.features));
+        for(int j = 0; j < this.trainingData.size(); j++) {
+            TrainingData t = this.trainingData.get(j);
+            double ps = this.PS.get(j);
+            sum += Math.exp(linearPredictorFunction(t.features, ps));
         }
-        double result = Math.exp(linearPredictorFunction(this.trainingData.get(i).features))/sum;
+        double result = Math.exp(linearPredictorFunction(this.trainingData.get(i).features, this.PS.get(i)))/sum;
         return result;
     }
 
-    private double linearPredictorFunction(double[] itinerary) {
+    private double linearPredictorFunction(double[] itinerary , double ps) {
         assert itinerary.length == valueCache.length;
         double sum = 0.0;
         for(int i = 0; i < this.valueCache.length; i++) {
             sum += itinerary[i]*this.valueCache[i];
         }
-        return sum;
+        return sum + (BETA*ps);
     }
 
     private void add(double[] a, double[] b) {
@@ -164,17 +173,17 @@ public class LogitOptimizable extends SerializableVector implements Optimizable.
         return features;
     }
 
-    public static double softmax(Itinerary iter, double softmaxSum, double[] weights, int minTime) {
-        return Math.exp(linearPredictorFunction(toArray(iter, minTime), weights))/softmaxSum;
+    public static double softmaxPSCF(Itinerary iter, double softmaxSum, double[] weights, int minTime, double ps, double beta) {
+        return Math.exp(linearPredictorFunction(toArray(iter, minTime), weights, ps, beta))/softmaxSum;
     }
 
-    public static double linearPredictorFunction(double[] itinerary, double[] weights) {
+    public static double linearPredictorFunction(double[] itinerary, double[] weights, double ps, double beta) {
         assert itinerary.length == weights.length;
         double sum = 0.0;
         for(int i = 0; i < weights.length; i++) {
             sum += itinerary[i]*weights[i];
         }
-        return sum;
+        return sum + (beta*ps);
     }
 
     public static class TrainingData {

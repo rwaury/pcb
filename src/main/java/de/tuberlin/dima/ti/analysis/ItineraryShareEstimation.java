@@ -12,7 +12,6 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.core.fs.FileSystem;
 
 import java.text.SimpleDateFormat;
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Date;
 import java.util.HashMap;
@@ -37,26 +36,48 @@ public class ItineraryShareEstimation {
     private static final FileSystem.WriteMode OVERWRITE = FileSystem.WriteMode.OVERWRITE;
 
     public static void main(String[] args) throws Exception {
-        ise(false, true, TrainingData.MIDT, Logit.MNL);
-        ise(false, false, TrainingData.MIDT, Logit.MNL);
+        ise(false, true, TrainingData.MIDT, Logit.MNL, -1.0);
+        ise(false, false, TrainingData.MIDT, Logit.MNL, -1.0);
 
-        ise(true, true, TrainingData.DB1B, Logit.MNL);
-        ise(true, false, TrainingData.DB1B, Logit.MNL);
-        ise(false, true, TrainingData.DB1B, Logit.MNL);
-        ise(false, false, TrainingData.DB1B, Logit.MNL);
+        ise(true, true, TrainingData.DB1B, Logit.MNL, -1.0);
+        ise(true, false, TrainingData.DB1B, Logit.MNL, -1.0);
+        ise(false, true, TrainingData.DB1B, Logit.MNL, -1.0);
+        ise(false, false, TrainingData.DB1B, Logit.MNL, -1.0);
 
-        ise(true, true, TrainingData.BOTH_MERGED, Logit.MNL);
-        ise(true, false, TrainingData.BOTH_MERGED, Logit.MNL);
-        ise(false, true, TrainingData.BOTH_MERGED, Logit.MNL);
-        ise(false, false, TrainingData.BOTH_MERGED, Logit.MNL);
+        ise(true, true, TrainingData.BOTH_MERGED, Logit.MNL, -1.0);
+        ise(true, false, TrainingData.BOTH_MERGED, Logit.MNL, -1.0);
+        ise(false, true, TrainingData.BOTH_MERGED, Logit.MNL, -1.0);
+        ise(false, false, TrainingData.BOTH_MERGED, Logit.MNL, -1.0);
 
-        ise(true, true, TrainingData.BOTH_US_SEPARATE, Logit.MNL);
-        ise(true, false, TrainingData.BOTH_US_SEPARATE, Logit.MNL);
-        ise(false, true, TrainingData.BOTH_US_SEPARATE, Logit.MNL);
-        ise(false, false, TrainingData.BOTH_US_SEPARATE, Logit.MNL);
+        ise(true, true, TrainingData.BOTH_US_SEPARATE, Logit.MNL, -1.0);
+        ise(true, false, TrainingData.BOTH_US_SEPARATE, Logit.MNL, -1.0);
+        ise(false, true, TrainingData.BOTH_US_SEPARATE, Logit.MNL, -1.0);
+        ise(false, false, TrainingData.BOTH_US_SEPARATE, Logit.MNL, -1.0);
+
+        ise(false, true, TrainingData.MIDT, Logit.PSL, 0.1);
+        ise(false, false, TrainingData.MIDT, Logit.PSL, 0.1);
+        ise(false, true, TrainingData.MIDT, Logit.PSL, 0.25);
+        ise(false, false, TrainingData.MIDT, Logit.PSL, 0.25);
+        ise(false, true, TrainingData.MIDT, Logit.PSL, 0.5);
+        ise(false, false, TrainingData.MIDT, Logit.PSL, 0.5);
+        ise(false, true, TrainingData.MIDT, Logit.PSL, 0.75);
+        ise(false, false, TrainingData.MIDT, Logit.PSL, 0.75);
+        ise(false, true, TrainingData.MIDT, Logit.PSL, 1.0);
+        ise(false, false, TrainingData.MIDT, Logit.PSL, 1.0);
+
+        ise(false, true, TrainingData.MIDT, Logit.CLOGIT, 0.1);
+        ise(false, false, TrainingData.MIDT, Logit.CLOGIT, 0.1);
+        ise(false, true, TrainingData.MIDT, Logit.CLOGIT, 0.25);
+        ise(false, false, TrainingData.MIDT, Logit.CLOGIT, 0.25);
+        ise(false, true, TrainingData.MIDT, Logit.CLOGIT, 0.5);
+        ise(false, false, TrainingData.MIDT, Logit.CLOGIT, 0.5);
+        ise(false, true, TrainingData.MIDT, Logit.CLOGIT, 0.75);
+        ise(false, false, TrainingData.MIDT, Logit.CLOGIT, 0.75);
+        ise(false, true, TrainingData.MIDT, Logit.CLOGIT, 1.0);
+        ise(false, false, TrainingData.MIDT, Logit.CLOGIT, 1.0);
     }
 
-    public static void ise(boolean spreadOverWeek, boolean useEuclidean, TrainingData td, Logit logit) throws Exception {
+    public static void ise(boolean spreadOverWeek, boolean useEuclidean, TrainingData td, Logit logit, double beta) throws Exception {
         ExecutionEnvironment env = ExecutionEnvironment.getExecutionEnvironment();
 
         String regressionMethod;
@@ -83,15 +104,20 @@ public class ItineraryShareEstimation {
             throw new Exception("Unknown data usage parameter: " + TrainingData.values()[td.ordinal()]);
         }
 
+        String betaStr = "";
+        if(logit != Logit.MNL) {
+            betaStr = Double.toString(beta).replace('.', '-');
+        }
+
         String distanceMetric = useEuclidean ? "Euclidean" : "Mahalanobis";
 
         String description;
         if(spreadOverWeek) {
             description = '_' + regressionMethod + '_' + ticketTrainingData + '_' + "spread" + '_' + distanceMetric;
         } else {
-            description = '_' + regressionMethod + '_' + ticketTrainingData + '_' + distanceMetric;
+            description = '_' + regressionMethod + '_' + ticketTrainingData + '_' + distanceMetric + '_' + betaStr;
         }
-        
+
         // extract coordinates of all known airports
         DataSet<Tuple8<String, String, String, String, String, Double, Double, String>> airportCoordinatesNR =
                 env.readTextFile(oriPath).flatMap(new AirportCoordinateExtractor());
@@ -245,28 +271,46 @@ public class ItineraryShareEstimation {
         if(logit == Logit.MNL) {
             reducer = new LogitTrainer();
         } else if(logit == Logit.CLOGIT) {
-            reducer = new LogitTrainer();
+            reducer = new CLogitTrainer(beta);
         } else if(logit == Logit.PSL) {
-            reducer = new LogitTrainer();
+            reducer = new PSLTrainer(beta);
         } else{
             throw new Exception("Unknown logit parameter: " + Logit.values()[logit.ordinal()]);
         }
 
-        DataSet<Tuple4<String, String, String, LogitOptimizable>> trainedLogit = trainingData.groupBy(0,1,2).reduceGroup(reducer);
+        if(logit == Logit.MNL) {
+            DataSet<Tuple4<String, String, String, LogitOptimizable>> trainedLogit = trainingData.groupBy(0, 1, 2).reduceGroup(reducer);
 
-        DataSet<Tuple6<String, String, String, Double, SerializableVector, LogitOptimizable>> TMWithWeights =
-                TMWithMIDT.join(trainedLogit, JOIN_HINT).where(0,1,2).equalTo(0,1,2).with(new WeightTMJoiner());
+            DataSet<Tuple6<String, String, String, Double, SerializableVector, LogitOptimizable>> TMWithWeights =
+                    TMWithMIDT.join(trainedLogit, JOIN_HINT).where(0,1,2).equalTo(0,1,2).with(new WeightTMJoiner());
 
-        DataSet<Tuple5<String, String, String, Double, LogitOptimizable>> allWeighted =
-                TMWithWeights.coGroup(TMWithMIDT).where(2).equalTo(2).with(new ODDistanceComparator(useEuclidean));
+            DataSet<Tuple5<String, String, String, Double, LogitOptimizable>> allWeighted =
+                    TMWithWeights.coGroup(TMWithMIDT).where(2).equalTo(2).with(new ODDistanceComparator(useEuclidean));
 
-        DataSet<Itinerary> estimate = itinerariesWithMIDT.coGroup(allWeighted).where(0,1,2).equalTo(0,1,2).with(new TrafficEstimator());
+            DataSet<Itinerary> estimate = itinerariesWithMIDT.coGroup(allWeighted).where(0,1,2).equalTo(0,1,2).with(new TrafficEstimator());
 
-        estimate.map(new Itin2Agg()).groupBy(0,1,2,3,4,5,6).sum(7).writeAsCsv(outputPath + "ItineraryEstimateAgg" + description, "\n", ";", OVERWRITE);
+            estimate.map(new Itin2Agg()).groupBy(0,1,2,3,4,5,6).sum(7).writeAsCsv(outputPath + "ItineraryEstimateAgg" + description, "\n", ";", OVERWRITE);
 
-        //estimate.groupBy(0,1,2).sortGroup(15, Order.DESCENDING).first(1000000000).writeAsCsv(outputPath + "ItineraryEstimate", "\n", ",", OVERWRITE);
+            //estimate.groupBy(0,1,2).sortGroup(15, Order.DESCENDING).first(1000000000).writeAsCsv(outputPath + "ItineraryEstimate", "\n", ",", OVERWRITE);
 
-        estimate.groupBy(0,1).reduceGroup(new ODSum()).writeAsCsv(outputPath + "ODSum" + description, "\n", ",", OVERWRITE).setParallelism(1);
+            estimate.groupBy(0, 1).reduceGroup(new ODSum()).writeAsCsv(outputPath + "ODSum" + description, "\n", ",", OVERWRITE).setParallelism(1);
+        } else {
+            DataSet<Tuple4<String, String, String, PSLOptimizable>> trainedLogit = trainingData.groupBy(0,1,2).reduceGroup(reducer);
+
+            DataSet<Tuple6<String, String, String, Double, SerializableVector, PSLOptimizable>> TMWithWeights =
+                    TMWithMIDT.join(trainedLogit, JOIN_HINT).where(0,1,2).equalTo(0,1,2).with(new PSCFWeightTMJoiner());
+
+            DataSet<Tuple5<String, String, String, Double, PSLOptimizable>> allWeighted =
+                    TMWithWeights.coGroup(TMWithMIDT).where(2).equalTo(2).with(new PSCFODDistanceComparator(useEuclidean));
+
+            DataSet<Itinerary> estimate = itinerariesWithMIDT.coGroup(allWeighted).where(0,1,2).equalTo(0,1,2).with(new PSCFTrafficEstimator(logit, beta));
+
+            estimate.map(new Itin2Agg()).groupBy(0,1,2,3,4,5,6).sum(7).writeAsCsv(outputPath + "ItineraryEstimateAgg" + description, "\n", ";", OVERWRITE);
+
+            //estimate.groupBy(0,1,2).sortGroup(15, Order.DESCENDING).first(1000000000).writeAsCsv(outputPath + "ItineraryEstimate", "\n", ",", OVERWRITE);
+
+            estimate.groupBy(0, 1).reduceGroup(new ODSum()).writeAsCsv(outputPath + "ODSum" + description, "\n", ",", OVERWRITE).setParallelism(1);
+        }
 
         //System.out.println(env.getExecutionPlan());
         env.execute("ItineraryShareEstimation");
@@ -413,6 +457,20 @@ public class ItineraryShareEstimation {
                 Tuple5<String, String, String, Double, SerializableVector> tmEntry,
                 Tuple4<String, String, String, LogitOptimizable> logit) throws Exception {
             return new Tuple6<String, String, String, Double, SerializableVector, LogitOptimizable>
+                    (tmEntry.f0, tmEntry.f1, tmEntry.f2, tmEntry.f3, tmEntry.f4, logit.f3);
+        }
+    }
+
+    // merge TM estimates and training results
+    private static class PSCFWeightTMJoiner implements JoinFunction<Tuple5<String, String, String, Double, SerializableVector>,
+            Tuple4<String, String, String, PSLOptimizable>,
+            Tuple6<String, String, String, Double, SerializableVector, PSLOptimizable>> {
+
+        @Override
+        public Tuple6<String, String, String, Double, SerializableVector, PSLOptimizable> join(
+                Tuple5<String, String, String, Double, SerializableVector> tmEntry,
+                Tuple4<String, String, String, PSLOptimizable> logit) throws Exception {
+            return new Tuple6<String, String, String, Double, SerializableVector, PSLOptimizable>
                     (tmEntry.f0, tmEntry.f1, tmEntry.f2, tmEntry.f3, tmEntry.f4, logit.f3);
         }
     }
