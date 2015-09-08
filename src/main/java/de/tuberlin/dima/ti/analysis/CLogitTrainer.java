@@ -2,6 +2,7 @@ package de.tuberlin.dima.ti.analysis;
 
 import cc.mallet.optimize.LimitedMemoryBFGS;
 import cc.mallet.optimize.OptimizationException;
+import de.tuberlin.dima.ti.pcb.CBUtil;
 import org.apache.flink.api.common.functions.RichGroupReduceFunction;
 import org.apache.flink.api.java.tuple.Tuple4;
 import org.apache.flink.api.java.tuple.Tuple8;
@@ -37,6 +38,7 @@ public class CLogitTrainer extends RichGroupReduceFunction<MIDT, Tuple4<String, 
     @Override
     public void reduce(Iterable<MIDT> midts, Collector<Tuple4<String, String, String, PSLOptimizable>> out) throws Exception {
         ArrayList<PSLOptimizable.TrainingData> trainingData = new ArrayList<PSLOptimizable.TrainingData>();
+        ArrayList<CFValue> CFValues = new ArrayList<CFValue>();
         ArrayList<Double> CF = new ArrayList<Double>();
         Iterator<MIDT> iterator = midts.iterator();
         MIDT midt = null;
@@ -48,9 +50,57 @@ public class CLogitTrainer extends RichGroupReduceFunction<MIDT, Tuple4<String, 
             }
             double percentageWaiting = (midt.f8 == 0 || midt.f9 == 0) ? 0.0 : midt.f9/midt.f8;
             trainingData.add(new PSLOptimizable.TrainingData(midt.f8, percentageWaiting, midt.f10, midt.f12, midt.f13, midt.getNumAirlines(), midt.f11));
+            CFValue cfv;
+            if(midt.f14.isEmpty()) {
+                String seg1 = midt.f0 + midt.f1;
+                AirportInfo o = this.airports.get(midt.f0);
+                AirportInfo d = this.airports.get(midt.f1);
+                double dist1 = CBUtil.dist(o.latitude, o.longitude, d.latitude, d.longitude);
+                cfv = new CFValue(seg1, dist1);
+            } else {
+                if(midt.f15.isEmpty()) {
+                    String seg1 = midt.f0 + midt.f14;
+                    String seg2 = midt.f14 + midt.f1;
+                    AirportInfo o = this.airports.get(midt.f0);
+                    AirportInfo h1 = this.airports.get(midt.f14);
+                    AirportInfo d = this.airports.get(midt.f1);
+                    double dist1 = CBUtil.dist(o.latitude, o.longitude, h1.latitude, h1.longitude);
+                    double dist2 = CBUtil.dist(h1.latitude, h1.longitude, d.latitude, d.longitude);
+                    cfv = new CFValue(seg1, seg2, dist1, dist2);
+                } else {
+                    String seg1 = midt.f0 + midt.f14;
+                    String seg2 = midt.f14 + midt.f15;
+                    String seg3 = midt.f15 + midt.f1;
+                    AirportInfo o = this.airports.get(midt.f0);
+                    AirportInfo h1 = this.airports.get(midt.f14);
+                    AirportInfo h2 = this.airports.get(midt.f15);
+                    AirportInfo d = this.airports.get(midt.f1);
+                    double dist1 = CBUtil.dist(o.latitude, o.longitude, h1.latitude, h1.longitude);
+                    double dist2 = CBUtil.dist(h1.latitude, h1.longitude, h2.latitude, h2.longitude);
+                    double dist3 = CBUtil.dist(h2.latitude, h2.longitude, d.latitude, d.longitude);
+                    cfv = new CFValue(seg1, seg2, seg3, dist1, dist2, dist3);
+                }
+            }
+            CFValues.add(cfv);
         }
         if(trainingData.size() < 2) {
             return;
+        }
+        for (int k = 0; k < CFValues.size(); k++) {
+            CFValue cfk = CFValues.get(k);
+            double Lk = cfk.distance();
+            double sum = 0.0;
+            for (int l = 0; l < CFValues.size(); l++) {
+                if(k == l) {
+                    continue;
+                }
+                CFValue cfl = CFValues.get(l);
+                double Ll = cfl.distance();
+                double Lkl = cfk.sharedDist(cfl);
+                sum += (Lkl/Math.sqrt(Lk*Ll))*((Lk-Lkl)/(Ll-Lkl));
+            }
+            double cf = Math.log(1+sum);
+            CF.add(cf);
         }
         PSLOptimizable optimizable = new PSLOptimizable(BETA);
         if(minTravelTime < 1) {
@@ -101,5 +151,55 @@ public class CLogitTrainer extends RichGroupReduceFunction<MIDT, Tuple4<String, 
             this.longitude = tuple8.f6;
             this.icao = tuple8.f7;
         }
+    }
+
+    private class CFValue {
+
+        String[] segments;
+        double[] segmentDists;
+
+        public CFValue(String seg1, double dist1) {
+            this.segments = new String[]{seg1};
+            this.segmentDists = new double[]{dist1};
+        }
+
+        public CFValue(String seg1, String seg2, double dist1, double dist2) {
+            this.segments = new String[]{seg1, seg2};
+            this.segmentDists = new double[]{dist1, dist2};
+        }
+
+        public CFValue(String seg1, String seg2, String seg3, double dist1, double dist2, double dist3) {
+            this.segments = new String[]{seg1, seg2, seg3};
+            this.segmentDists = new double[]{dist1, dist2, dist3};
+        }
+
+        public int size() {
+            return this.segments.length;
+        }
+
+        public double distance() {
+            double result = 0.0;
+            for (int i = 0; i < segmentDists.length; i++) {
+                result += segmentDists[i];
+            }
+            return result;
+        }
+
+        public double sharedDist(CFValue cfv) {
+            if(cfv.size() == 1 && this.size() ==1) {
+                return this.segmentDists[0];
+            }
+            double sharedDist = 0.0;
+            for(int i = 0; i < cfv.size(); i++) {
+                String seg = cfv.segments[i];
+                for (int j = 0; j < this.size(); j++) {
+                    if(this.segments[j].equals(seg)) {
+                        sharedDist += this.segmentDists[j];
+                    }
+                }
+            }
+            return sharedDist;
+        }
+
     }
 }

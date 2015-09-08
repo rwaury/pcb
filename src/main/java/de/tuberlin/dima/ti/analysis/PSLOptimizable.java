@@ -39,6 +39,7 @@ public class PSLOptimizable extends SerializableVector implements Optimizable.By
 
     public void clear() {
         this.trainingData.clear();
+        this.PS.clear();
         for(int i = 0; i < this.valueCache.length; i++) {
             this.getVector().setEntry(i, this.valueCache[i]);
         }

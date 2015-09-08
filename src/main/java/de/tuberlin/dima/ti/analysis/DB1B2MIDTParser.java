@@ -28,7 +28,7 @@ public class DB1B2MIDTParser extends RichFlatMapFunction<String, MIDT> {
 
     private static final double AVG_CRUISE_SPEED = 800.0;
 
-    private static final int TL_OVERHEAD = 10;
+    private static final int TL_OVERHEAD = 20;
 
     private static final int AVG_WAITING_TIME = 60;
 

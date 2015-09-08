@@ -54,25 +54,39 @@ public class ItineraryShareEstimation {
         ise(false, true, TrainingData.BOTH_US_SEPARATE, Logit.MNL, -1.0);
         ise(false, false, TrainingData.BOTH_US_SEPARATE, Logit.MNL, -1.0);
 
-        ise(false, true, TrainingData.MIDT, Logit.PSL, 0.1);
-        ise(false, false, TrainingData.MIDT, Logit.PSL, 0.1);
-        ise(false, true, TrainingData.MIDT, Logit.PSL, 0.25);
-        ise(false, false, TrainingData.MIDT, Logit.PSL, 0.25);
+
+        ise(false, true, TrainingData.MIDT, Logit.PSL, 0.3);
+        ise(false, false, TrainingData.MIDT, Logit.PSL, 0.3);
+        ise(false, true, TrainingData.MIDT, Logit.PSL, 0.4);
+        ise(false, false, TrainingData.MIDT, Logit.PSL, 0.4);
         ise(false, true, TrainingData.MIDT, Logit.PSL, 0.5);
         ise(false, false, TrainingData.MIDT, Logit.PSL, 0.5);
-        ise(false, true, TrainingData.MIDT, Logit.PSL, 0.75);
-        ise(false, false, TrainingData.MIDT, Logit.PSL, 0.75);
+        ise(false, true, TrainingData.MIDT, Logit.PSL, 0.6);
+        ise(false, false, TrainingData.MIDT, Logit.PSL, 0.6);
+        ise(false, true, TrainingData.MIDT, Logit.PSL, 0.7);
+        ise(false, false, TrainingData.MIDT, Logit.PSL, 0.7);
+        ise(false, true, TrainingData.MIDT, Logit.PSL, 0.8);
+        ise(false, false, TrainingData.MIDT, Logit.PSL, 0.8);
+        ise(false, true, TrainingData.MIDT, Logit.PSL, 0.9);
+        ise(false, false, TrainingData.MIDT, Logit.PSL, 0.9);
         ise(false, true, TrainingData.MIDT, Logit.PSL, 1.0);
         ise(false, false, TrainingData.MIDT, Logit.PSL, 1.0);
 
-        ise(false, true, TrainingData.MIDT, Logit.CLOGIT, 0.1);
-        ise(false, false, TrainingData.MIDT, Logit.CLOGIT, 0.1);
-        ise(false, true, TrainingData.MIDT, Logit.CLOGIT, 0.25);
-        ise(false, false, TrainingData.MIDT, Logit.CLOGIT, 0.25);
+
+        ise(false, true, TrainingData.MIDT, Logit.CLOGIT, 0.3);
+        ise(false, false, TrainingData.MIDT, Logit.CLOGIT, 0.3);
+        ise(false, true, TrainingData.MIDT, Logit.CLOGIT, 0.4);
+        ise(false, false, TrainingData.MIDT, Logit.CLOGIT, 0.4);
         ise(false, true, TrainingData.MIDT, Logit.CLOGIT, 0.5);
         ise(false, false, TrainingData.MIDT, Logit.CLOGIT, 0.5);
-        ise(false, true, TrainingData.MIDT, Logit.CLOGIT, 0.75);
-        ise(false, false, TrainingData.MIDT, Logit.CLOGIT, 0.75);
+        ise(false, true, TrainingData.MIDT, Logit.CLOGIT, 0.6);
+        ise(false, false, TrainingData.MIDT, Logit.CLOGIT, 0.6);
+        ise(false, true, TrainingData.MIDT, Logit.CLOGIT, 0.7);
+        ise(false, false, TrainingData.MIDT, Logit.CLOGIT, 0.7);
+        ise(false, true, TrainingData.MIDT, Logit.CLOGIT, 0.8);
+        ise(false, false, TrainingData.MIDT, Logit.CLOGIT, 0.8);
+        ise(false, true, TrainingData.MIDT, Logit.CLOGIT, 0.9);
+        ise(false, false, TrainingData.MIDT, Logit.CLOGIT, 0.9);
         ise(false, true, TrainingData.MIDT, Logit.CLOGIT, 1.0);
         ise(false, false, TrainingData.MIDT, Logit.CLOGIT, 1.0);
     }

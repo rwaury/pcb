@@ -27,6 +27,8 @@ public class MIDT extends Tuple16<String, String, String, String, String, String
         this.f11 = pax;
         this.f12 = geoDetour;
         this.f13 = numCountries;
+        this.f14 = "";
+        this.f15 = "";
     }
 
     public MIDT(String origin, String destination, String day,
