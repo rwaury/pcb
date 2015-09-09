@@ -30,16 +30,16 @@ public class ItineraryShareEstimation {
     private static String midtPath = PROTOCOL + "tmp/waury/input/MIDTTotalHits.csv";
     private static String db1bPath = PROTOCOL + "tmp/waury/input/db1b.csv";
     private static String cbOutputPath = PROTOCOL + "tmp/waury/output/";
-    private static String outputPath = PROTOCOL + "tmp/waury/output/tm/";
+    private static String outputPath = PROTOCOL + "tmp/waury/output/ise/";
 
     private static final JoinOperatorBase.JoinHint JOIN_HINT = JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE;
     private static final FileSystem.WriteMode OVERWRITE = FileSystem.WriteMode.OVERWRITE;
 
     public static void main(String[] args) throws Exception {
-        ise(false, true, TrainingData.MIDT, Logit.MNL, -1.0);
+        /*ise(false, true, TrainingData.MIDT, Logit.MNL, -1.0);*/
         ise(false, false, TrainingData.MIDT, Logit.MNL, -1.0);
 
-        ise(true, true, TrainingData.DB1B, Logit.MNL, -1.0);
+/*        ise(true, true, TrainingData.DB1B, Logit.MNL, -1.0);
         ise(true, false, TrainingData.DB1B, Logit.MNL, -1.0);
         ise(false, true, TrainingData.DB1B, Logit.MNL, -1.0);
         ise(false, false, TrainingData.DB1B, Logit.MNL, -1.0);
@@ -88,7 +88,7 @@ public class ItineraryShareEstimation {
         ise(false, true, TrainingData.MIDT, Logit.CLOGIT, 0.9);
         ise(false, false, TrainingData.MIDT, Logit.CLOGIT, 0.9);
         ise(false, true, TrainingData.MIDT, Logit.CLOGIT, 1.0);
-        ise(false, false, TrainingData.MIDT, Logit.CLOGIT, 1.0);
+        ise(false, false, TrainingData.MIDT, Logit.CLOGIT, 1.0);*/
     }
 
     public static void ise(boolean spreadOverWeek, boolean useEuclidean, TrainingData td, Logit logit, double beta) throws Exception {
@@ -168,7 +168,7 @@ public class ItineraryShareEstimation {
 
         // group sort and first-1 is necessary to exclude multileg connections that yield the same OD (only the fastest is included)
         DataSet<Itinerary> itinerariesWithMIDT = itineraries.groupBy(0,1,2,3,4,5,6,7).sortGroup(10, Order.ASCENDING).first(1).coGroup(midt)
-                .where(0,1,2,3,4,5,6,7).equalTo(0,1,2,3,4,5,6,7).with(new ItineraryMIDTMerger());
+                .where(0,1,2,3,4,5,6,7,20,21).equalTo(0,1,2,3,4,5,6,7,14,15).with(new ItineraryMIDTMerger());
 
         DataSet<Tuple7<String, String, Boolean, Boolean, Boolean, Integer, Integer>> APBoundsAgg = midtStrings.flatMap(new MIDTCapacityEmitter(false, true, false))
                 .withBroadcastSet(airportCountry, AP_GEO_DATA);
@@ -319,7 +319,7 @@ public class ItineraryShareEstimation {
 
             DataSet<Itinerary> estimate = itinerariesWithMIDT.coGroup(allWeighted).where(0,1,2).equalTo(0,1,2).with(new PSCFTrafficEstimator(logit, beta));
 
-            estimate.map(new Itin2Agg()).groupBy(0,1,2,3,4,5,6).sum(7).writeAsCsv(outputPath + "ItineraryEstimateAgg" + description, "\n", ";", OVERWRITE);
+            estimate.map(new Itin2Agg()).groupBy(0,1,2,3,4,5,6).sum(7).writeAsCsv(outputPath + "ItineraryEstimateAgg" + description, "\n", ";", OVERWRITE).setParallelism(1);
 
             //estimate.groupBy(0,1,2).sortGroup(15, Order.DESCENDING).first(1000000000).writeAsCsv(outputPath + "ItineraryEstimate", "\n", ",", OVERWRITE);
 

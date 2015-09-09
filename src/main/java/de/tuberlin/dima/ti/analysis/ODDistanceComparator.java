@@ -9,6 +9,8 @@ import org.apache.flink.util.Collector;
 
 import java.util.ArrayList;
 
+import static org.apache.commons.math3.linear.MatrixUtils.inverse;
+
 // assign weights to ODs without training data (very slow at the moment, performs day wise NL-join)
 public class ODDistanceComparator implements
         CoGroupFunction<Tuple6<String, String, String, Double, SerializableVector, LogitOptimizable>,
@@ -67,7 +69,7 @@ public class ODDistanceComparator implements
                 count++;
             }
             mu.mapDivideToSelf((double) count);
-            RealMatrix Sinv = MatrixUtils.inverse(S.getCovarianceMatrix());
+            RealMatrix Sinv = inverse(S.getCovarianceMatrix());
             double distance = 0.0;
             for(Tuple5<String, String, String, Double, SerializableVector> uw : unweightedODs) {
                 double minDistance = Double.MAX_VALUE;

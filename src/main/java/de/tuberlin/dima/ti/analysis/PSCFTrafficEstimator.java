@@ -183,7 +183,7 @@ public class PSCFTrafficEstimator extends RichCoGroupFunction<Itinerary, Tuple5<
         if(minTime < 1) {
             minTime = 1;
         }
-        ArrayList<Double> PS = new ArrayList<Double>(); // TODO: compute PS/CF values
+        ArrayList<Double> PS = new ArrayList<Double>();
         if(this.logit == Logit.PSL) {
             for(PSValue psv : PSValues) {
                 double ps = 0.0;

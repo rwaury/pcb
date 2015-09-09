@@ -296,7 +296,7 @@ public class TrafficAnalysis {
                 TMWithMIDT.join(trainedLogit, JOIN_HINT).where(0,1,2).equalTo(0,1,2).with(new WeightTMJoiner());
 
         DataSet<Tuple5<String, String, String, Double, LogitOptimizable>> allWeighted =
-                TMWithWeights.coGroup(TMWithMIDT).where(2).equalTo(2).with(new ODDistanceComparator());
+                TMWithWeights.coGroup(TMWithMIDT).where(2).equalTo(2).with(new ODDistanceComparator(false));
 
         DataSet<Itinerary> estimate = itinerariesWithMIDT.coGroup(allWeighted).where(0,1,2).equalTo(0,1,2).with(new TrafficEstimator());
 
