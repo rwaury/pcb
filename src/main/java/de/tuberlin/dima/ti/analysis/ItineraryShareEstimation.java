@@ -29,20 +29,20 @@ public class ItineraryShareEstimation {
     private static String regionPath = PROTOCOL + "tmp/waury/input/ori_country_region_info.csv";
     private static String midtPath = PROTOCOL + "tmp/waury/input/MIDTTotalHits.csv";
     private static String db1bPath = PROTOCOL + "tmp/waury/input/db1b.csv";
-    private static String cbOutputPath = PROTOCOL + "tmp/waury/output/";
-    private static String outputPath = PROTOCOL + "tmp/waury/output/ise/";
+    private static String cbOutputPath = PROTOCOL + "tmp/waury/output/benchmark/50days/";
+    private static String outputPath = PROTOCOL + "tmp/waury/output/benchmark/50days/ise/";
 
     private static final JoinOperatorBase.JoinHint JOIN_HINT = JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE;
     private static final FileSystem.WriteMode OVERWRITE = FileSystem.WriteMode.OVERWRITE;
 
     public static void main(String[] args) throws Exception {
-        /*ise(false, true, TrainingData.MIDT, Logit.MNL, -1.0);*/
-        ise(false, false, TrainingData.MIDT, Logit.MNL, -1.0);
+        ise(false, true, TrainingData.MIDT, Logit.MNL, -1.0);
+        /*ise(false, false, TrainingData.MIDT, Logit.MNL, -1.0);
 
-/*        ise(true, true, TrainingData.DB1B, Logit.MNL, -1.0);
-        ise(true, false, TrainingData.DB1B, Logit.MNL, -1.0);
-        ise(false, true, TrainingData.DB1B, Logit.MNL, -1.0);
-        ise(false, false, TrainingData.DB1B, Logit.MNL, -1.0);
+        //ise(true, true, TrainingData.DB1B, Logit.MNL, -1.0);
+        //ise(true, false, TrainingData.DB1B, Logit.MNL, -1.0);
+        //ise(false, true, TrainingData.DB1B, Logit.MNL, -1.0);
+        //ise(false, false, TrainingData.DB1B, Logit.MNL, -1.0);
 
         ise(true, true, TrainingData.BOTH_MERGED, Logit.MNL, -1.0);
         ise(true, false, TrainingData.BOTH_MERGED, Logit.MNL, -1.0);
@@ -74,21 +74,21 @@ public class ItineraryShareEstimation {
 
 
         ise(false, true, TrainingData.MIDT, Logit.CLOGIT, 0.3);
-        ise(false, false, TrainingData.MIDT, Logit.CLOGIT, 0.3);
+        //ise(false, false, TrainingData.MIDT, Logit.CLOGIT, 0.3);
         ise(false, true, TrainingData.MIDT, Logit.CLOGIT, 0.4);
-        ise(false, false, TrainingData.MIDT, Logit.CLOGIT, 0.4);
+        //ise(false, false, TrainingData.MIDT, Logit.CLOGIT, 0.4);
         ise(false, true, TrainingData.MIDT, Logit.CLOGIT, 0.5);
-        ise(false, false, TrainingData.MIDT, Logit.CLOGIT, 0.5);
+        //ise(false, false, TrainingData.MIDT, Logit.CLOGIT, 0.5);
         ise(false, true, TrainingData.MIDT, Logit.CLOGIT, 0.6);
-        ise(false, false, TrainingData.MIDT, Logit.CLOGIT, 0.6);
+        //ise(false, false, TrainingData.MIDT, Logit.CLOGIT, 0.6);
         ise(false, true, TrainingData.MIDT, Logit.CLOGIT, 0.7);
-        ise(false, false, TrainingData.MIDT, Logit.CLOGIT, 0.7);
+        //ise(false, false, TrainingData.MIDT, Logit.CLOGIT, 0.7);
         ise(false, true, TrainingData.MIDT, Logit.CLOGIT, 0.8);
-        ise(false, false, TrainingData.MIDT, Logit.CLOGIT, 0.8);
+        //ise(false, false, TrainingData.MIDT, Logit.CLOGIT, 0.8);
         ise(false, true, TrainingData.MIDT, Logit.CLOGIT, 0.9);
-        ise(false, false, TrainingData.MIDT, Logit.CLOGIT, 0.9);
+        //ise(false, false, TrainingData.MIDT, Logit.CLOGIT, 0.9);
         ise(false, true, TrainingData.MIDT, Logit.CLOGIT, 1.0);
-        ise(false, false, TrainingData.MIDT, Logit.CLOGIT, 1.0);*/
+        //ise(false, false, TrainingData.MIDT, Logit.CLOGIT, 1.0);*/
     }
 
     public static void ise(boolean spreadOverWeek, boolean useEuclidean, TrainingData td, Logit logit, double beta) throws Exception {
@@ -307,9 +307,9 @@ public class ItineraryShareEstimation {
 
             //estimate.groupBy(0,1,2).sortGroup(15, Order.DESCENDING).first(1000000000).writeAsCsv(outputPath + "ItineraryEstimate", "\n", ",", OVERWRITE);
 
-            estimate.groupBy(0, 1).reduceGroup(new ODSum()).writeAsCsv(outputPath + "ODSum" + description, "\n", ",", OVERWRITE).setParallelism(1);
+            estimate.groupBy(0, 1).reduceGroup(new ODSum()).writeAsCsv(outputPath + "ODSum" + description, "\n", ",", OVERWRITE);
         } else {
-            DataSet<Tuple4<String, String, String, PSLOptimizable>> trainedLogit = trainingData.groupBy(0,1,2).reduceGroup(reducer);
+            DataSet<Tuple4<String, String, String, PSLOptimizable>> trainedLogit = trainingData.groupBy(0,1,2).reduceGroup(reducer).withBroadcastSet(airportCountry, AP_GEO_DATA);
 
             DataSet<Tuple6<String, String, String, Double, SerializableVector, PSLOptimizable>> TMWithWeights =
                     TMWithMIDT.join(trainedLogit, JOIN_HINT).where(0,1,2).equalTo(0,1,2).with(new PSCFWeightTMJoiner());
@@ -317,13 +317,13 @@ public class ItineraryShareEstimation {
             DataSet<Tuple5<String, String, String, Double, PSLOptimizable>> allWeighted =
                     TMWithWeights.coGroup(TMWithMIDT).where(2).equalTo(2).with(new PSCFODDistanceComparator(useEuclidean));
 
-            DataSet<Itinerary> estimate = itinerariesWithMIDT.coGroup(allWeighted).where(0,1,2).equalTo(0,1,2).with(new PSCFTrafficEstimator(logit, beta));
+            DataSet<Itinerary> estimate = itinerariesWithMIDT.coGroup(allWeighted).where(0,1,2).equalTo(0,1,2).with(new PSCFTrafficEstimator(logit, beta)).withBroadcastSet(airportCountry, AP_GEO_DATA);
 
-            estimate.map(new Itin2Agg()).groupBy(0,1,2,3,4,5,6).sum(7).writeAsCsv(outputPath + "ItineraryEstimateAgg" + description, "\n", ";", OVERWRITE).setParallelism(1);
+            estimate.map(new Itin2Agg()).groupBy(0,1,2,3,4,5,6).sum(7).writeAsCsv(outputPath + "ItineraryEstimateAgg" + description, "\n", ";", OVERWRITE);
 
             //estimate.groupBy(0,1,2).sortGroup(15, Order.DESCENDING).first(1000000000).writeAsCsv(outputPath + "ItineraryEstimate", "\n", ",", OVERWRITE);
 
-            estimate.groupBy(0, 1).reduceGroup(new ODSum()).writeAsCsv(outputPath + "ODSum" + description, "\n", ",", OVERWRITE).setParallelism(1);
+            estimate.groupBy(0, 1).reduceGroup(new ODSum()).writeAsCsv(outputPath + "ODSum" + description, "\n", ",", OVERWRITE);
         }
 
         //System.out.println(env.getExecutionPlan());

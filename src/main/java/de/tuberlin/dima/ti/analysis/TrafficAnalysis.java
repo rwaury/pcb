@@ -20,7 +20,7 @@ public class TrafficAnalysis {
 
     // calendar week 19 2014
     public static long firstPossibleTimestamp = 1399248000000L;
-    public static long lastPossibleTimestamp = 1399852799000L;
+    public static long lastPossibleTimestamp = 1403567999000L;
 
     public static final double SLF = 0.797;
 
@@ -74,8 +74,8 @@ public class TrafficAnalysis {
     private static String regionPath = PROTOCOL + "tmp/waury/input/ori_country_region_info.csv";
     private static String midtPath = PROTOCOL + "tmp/waury/input/MIDTTotalHits.csv";
     private static String db1bPath = PROTOCOL + "tmp/waury/input/db1b.csv";
-    private static String cbOutputPath = PROTOCOL + "tmp/waury/output/";
-    private static String outputPath = PROTOCOL + "tmp/waury/output/tm/";
+    private static String cbOutputPath = PROTOCOL + "tmp/waury/output/benchmark/1day/";
+    private static String outputPath = PROTOCOL + "tmp/waury/output/benchmark/1day/tm/";
 
     private static final JoinOperatorBase.JoinHint JOIN_HINT = JoinOperatorBase.JoinHint.REPARTITION_SORT_MERGE;
     private static final FileSystem.WriteMode OVERWRITE = FileSystem.WriteMode.OVERWRITE;
@@ -300,7 +300,7 @@ public class TrafficAnalysis {
 
         DataSet<Itinerary> estimate = itinerariesWithMIDT.coGroup(allWeighted).where(0,1,2).equalTo(0,1,2).with(new TrafficEstimator());
 
-        estimate.map(new Itin2Agg()).groupBy(0,1,2,3,4,5,6).sum(7).writeAsCsv(outputPath + "ItineraryEstimateAgg", "\n", ";", OVERWRITE);
+        estimate.map(new Itin2Agg()).groupBy(0,1,2,3,4,5,6).sum(7).writeAsCsv(outputPath + "ItineraryEstimateAgg", "\n", ";", OVERWRITE).setParallelism(1);
 
         //estimate.groupBy(0,1,2).sortGroup(15, Order.DESCENDING).first(1000000000).writeAsCsv(outputPath + "ItineraryEstimate", "\n", ",", OVERWRITE);
 

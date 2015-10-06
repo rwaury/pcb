@@ -1,5 +1,6 @@
 package de.tuberlin.dima.ti.analysis;
 
+import org.apache.commons.math3.exception.NumberIsTooSmallException;
 import org.apache.commons.math3.linear.*;
 import org.apache.commons.math3.stat.correlation.StorelessCovariance;
 import org.apache.flink.api.common.functions.CoGroupFunction;
@@ -69,7 +70,12 @@ public class ODDistanceComparator implements
                 count++;
             }
             mu.mapDivideToSelf((double) count);
-            RealMatrix Sinv = inverse(S.getCovarianceMatrix());
+            RealMatrix Sinv;
+            try {
+                Sinv = inverse(S.getCovarianceMatrix());
+            } catch(NumberIsTooSmallException e) {
+                throw new Exception(e.getMessage() + "count: " + count);
+            }
             double distance = 0.0;
             for(Tuple5<String, String, String, Double, SerializableVector> uw : unweightedODs) {
                 double minDistance = Double.MAX_VALUE;

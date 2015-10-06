@@ -47,11 +47,11 @@ public class ParallelConnectionBuilder {
     private static String mctPathDefault = PROTOCOL + "tmp/waury/input/mct.csv";
 
     private static String outputPathKey = "OUTPUT_PATH_PROPERTY_KEY";
-    private static String outputPathDefault = PROTOCOL + "tmp/waury/output/";
+    private static String outputPathDefault = PROTOCOL + "tmp/waury/output/benchmark/50days/";
 
     /** date range as 64 bit timestamps **/
     public static final long START = 1399248000000L;
-    public static final long END = 1399852799000L;
+    public static final long END = 1403567999000L;
 
 
     /** CB parameters **/
@@ -82,7 +82,7 @@ public class ParallelConnectionBuilder {
         Properties properties = new Properties(defaults);
         boolean fullCB = true;
 
-        executeCBPhase0(properties);
+        //executeCBPhase0(properties);
         if(fullCB) {
             executeCBPhase1(properties);
         }
@@ -158,7 +158,7 @@ public class ParallelConnectionBuilder {
                 .equalTo("f0.f0", "f4", "f5", "f12").with(new MultiLegJoiner());
         DataSet<Flight> multiLeg5 = multiLeg5a.union(multiLeg5b);
 
-        DataSet<Flight> multiLeg6a = multiLeg3.join(multiLeg3, JOIN_HINT).where("f2.f0", "f4", "f5", "f13")
+        /*DataSet<Flight> multiLeg6a = multiLeg3.join(multiLeg3, JOIN_HINT).where("f2.f0", "f4", "f5", "f13")
                 .equalTo("f0.f0", "f4", "f5", "f12").with(new MultiLegJoiner());
         DataSet<Flight> multiLeg6b = multiLeg3.join(multiLeg3, JOIN_HINT).where("f2.f0", "f4", "f5", "f14")
                 .equalTo("f0.f0", "f4", "f5", "f12").with(new MultiLegJoiner());
@@ -174,9 +174,9 @@ public class ParallelConnectionBuilder {
                 .equalTo("f0.f0", "f4", "f5", "f12").with(new MultiLegJoiner());
         DataSet<Flight> multiLeg8b = multiLeg4.join(multiLeg4, JOIN_HINT).where("f2.f0", "f4", "f5", "f14")
                 .equalTo("f0.f0", "f4", "f5", "f12").with(new MultiLegJoiner());
-        DataSet<Flight> multiLeg8 = multiLeg8a.union(multiLeg8b);
+        DataSet<Flight> multiLeg8 = multiLeg8a.union(multiLeg8b);*/
 
-        DataSet<Flight> singleFltNoFlights = join4.union(multiLeg2).union(multiLeg3).union(multiLeg4).union(multiLeg5).union(multiLeg6).union(multiLeg7).union(multiLeg8);
+        DataSet<Flight> singleFltNoFlights = join4.union(multiLeg2).union(multiLeg3).union(multiLeg4).union(multiLeg5);//.union(multiLeg6).union(multiLeg7).union(multiLeg8);
 
         FileOutputFormat nonStop = new FlightOutput.NonStopFlightOutputFormat(new Path(outputPath + "one"));
         singleFltNoFlights.filter(new NonStopTrafficRestrictionsFilter()).write(nonStop, outputPath + "one", WRITE_MODE);

@@ -75,7 +75,8 @@ public class LogitOptimizable extends SerializableVector implements Optimizable.
             TrainingData t = this.trainingData.get(i);
             sum += t.hits * Math.log(softmax(i));
         }
-        return -sum;
+        //return -sum;
+        return sum;
     }
 
     @Override

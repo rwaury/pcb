@@ -63,8 +63,8 @@ public class MIDTParser extends RichFlatMapFunction<String, MIDT> {
         String hub3 = "";
         String hub4 = "";
 
-        long departureDay = Long.parseLong(tmp[11].trim())-1;
-        if(departureDay > 6) {
+        long departureDay = Long.parseLong(tmp[11].trim())-1L;
+        if(departureDay > 6L) {
             throw new Exception("Value error: " + s);
         }
 
@@ -164,6 +164,18 @@ public class MIDTParser extends RichFlatMapFunction<String, MIDT> {
                 flight1, flight2, flight3, flight4, flight5, travelTime, waitingTime,
                 segmentCount, pax, geoDetour, Math.max(1, countries.size()));
         out.collect(compress(result, hub1, hub2, hub3, hub4));
+
+        departureDay += 7L;
+        while(departureDay < 50) {
+            departureTimestamp = TrafficAnalysis.firstPossibleTimestamp + (departureDay*24L*60L*60L*1000L) + 1L;
+            date = new Date(departureTimestamp);
+            dayString = TrafficAnalysis.dayFormat.format(date);
+            result = new MIDT(origin, destination, dayString,
+                    flight1, flight2, flight3, flight4, flight5, travelTime, waitingTime,
+                    segmentCount, pax, geoDetour, Math.max(1, countries.size()));
+            out.collect(compress(result, hub1, hub2, hub3, hub4));
+            departureDay += 7L;
+        }
     }
 
     private MIDT compress(MIDT midt, String hub1, String hub2, String hub3, String hub4) {

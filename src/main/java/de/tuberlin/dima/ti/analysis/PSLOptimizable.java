@@ -16,6 +16,14 @@ public class PSLOptimizable extends SerializableVector implements Optimizable.By
 
     private double[] valueCache = null;
 
+    public PSLOptimizable() {
+        super(FEATURE_COUNT+1);
+        for(int i = 0; i < this.getVector().getDimension(); i++) {
+            this.getVector().setEntry(i, 1.0);
+        }
+        this.BETA = 1.0;
+    }
+
     public PSLOptimizable(double beta) {
         super(FEATURE_COUNT+1);
         this.BETA = beta;
@@ -83,7 +91,8 @@ public class PSLOptimizable extends SerializableVector implements Optimizable.By
             TrainingData t = this.trainingData.get(i);
             sum += t.hits * Math.log(softmax(i));
         }
-        return -sum;
+        //return -sum;
+        return sum;
     }
 
     @Override
